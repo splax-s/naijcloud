@@ -1,0 +1,104 @@
+// Mock data for development when API is not available
+export const mockData = {
+  dashboardMetrics: {
+    total_domains: 12,
+    active_edge_nodes: 8,
+    total_requests_24h: 125000,
+    cache_hit_ratio: 0.942,
+    avg_response_time: 45,
+    bandwidth_24h: 2300000000, // 2.3GB in bytes
+  },
+
+  trafficData: [
+    { timestamp: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(), requests: 1200, bandwidth: 45 * 1024 * 1024, cache_hits: 1100, cache_misses: 100 },
+    { timestamp: new Date(Date.now() - 20 * 60 * 60 * 1000).toISOString(), requests: 800, bandwidth: 32 * 1024 * 1024, cache_hits: 750, cache_misses: 50 },
+    { timestamp: new Date(Date.now() - 16 * 60 * 60 * 1000).toISOString(), requests: 2100, bandwidth: 78 * 1024 * 1024, cache_hits: 1980, cache_misses: 120 },
+    { timestamp: new Date(Date.now() - 12 * 60 * 60 * 1000).toISOString(), requests: 3200, bandwidth: 95 * 1024 * 1024, cache_hits: 3000, cache_misses: 200 },
+    { timestamp: new Date(Date.now() - 8 * 60 * 60 * 1000).toISOString(), requests: 2800, bandwidth: 87 * 1024 * 1024, cache_hits: 2640, cache_misses: 160 },
+    { timestamp: new Date(Date.now() - 4 * 60 * 60 * 1000).toISOString(), requests: 1900, bandwidth: 62 * 1024 * 1024, cache_hits: 1800, cache_misses: 100 },
+  ],
+
+  topDomains: [
+    { domain: 'example.com', requests: 125600, bandwidth: 45.2 * 1024 * 1024 * 1024, cache_hit_ratio: 0.942 },
+    { domain: 'api.example.com', requests: 89300, bandwidth: 23.8 * 1024 * 1024 * 1024, cache_hit_ratio: 0.875 },
+    { domain: 'static.example.com', requests: 67800, bandwidth: 34.1 * 1024 * 1024 * 1024, cache_hit_ratio: 0.981 },
+    { domain: 'cdn.example.com', requests: 45200, bandwidth: 18.9 * 1024 * 1024 * 1024, cache_hit_ratio: 0.913 },
+    { domain: 'media.example.com', requests: 34100, bandwidth: 12.7 * 1024 * 1024 * 1024, cache_hit_ratio: 0.768 },
+  ],
+
+  recentActivity: [
+    { id: '1', type: 'domain', action: 'Domain Added', target: 'example.com', timestamp: new Date(Date.now() - 2 * 60 * 1000).toISOString() },
+    { id: '2', type: 'cache', action: 'Cache Purged', target: 'static.example.com', timestamp: new Date(Date.now() - 15 * 60 * 1000).toISOString() },
+    { id: '3', type: 'health', action: 'Health Check Passed', target: 'Edge Node #3', timestamp: new Date(Date.now() - 60 * 60 * 1000).toISOString() },
+    { id: '4', type: 'domain', action: 'SSL Certificate Renewed', target: 'secure.example.com', timestamp: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString() },
+    { id: '5', type: 'cache', action: 'Cache Miss Alert', target: 'api.example.com', timestamp: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString() },
+  ],
+
+  domains: [
+    {
+      id: '1',
+      domain: 'example.com',
+      origin: 'origin.example.com',
+      enabled: true,
+      ssl_enabled: true,
+      cache_ttl: 3600,
+      created_at: '2024-01-15T10:00:00Z',
+      updated_at: '2024-01-15T10:00:00Z',
+    },
+    {
+      id: '2',
+      domain: 'api.example.com',
+      origin: 'api-origin.example.com',
+      enabled: true,
+      ssl_enabled: true,
+      cache_ttl: 1800,
+      created_at: '2024-02-03T14:30:00Z',
+      updated_at: '2024-02-03T14:30:00Z',
+    },
+  ],
+
+  edgeNodes: [
+    {
+      id: 'edge-001',
+      hostname: 'edge-lagos-01',
+      ip_address: '192.168.1.100',
+      region: 'nigeria-west',
+      location: 'Lagos, Nigeria',
+      status: 'online' as const,
+      health_score: 98.5,
+      last_heartbeat: new Date(Date.now() - 30 * 1000).toISOString(),
+      version: 'v1.2.3',
+      total_requests: 45600,
+      cache_hit_ratio: 0.94,
+      avg_response_time: 12,
+    },
+    {
+      id: 'edge-002',
+      hostname: 'edge-abuja-01',
+      ip_address: '192.168.1.101',
+      region: 'nigeria-central',
+      location: 'Abuja, Nigeria',
+      status: 'online' as const,
+      health_score: 99.2,
+      last_heartbeat: new Date(Date.now() - 15 * 1000).toISOString(),
+      version: 'v1.2.3',
+      total_requests: 38200,
+      cache_hit_ratio: 0.96,
+      avg_response_time: 8,
+    },
+    {
+      id: 'edge-003',
+      hostname: 'edge-kano-01',
+      ip_address: '192.168.1.102',
+      region: 'nigeria-north',
+      location: 'Kano, Nigeria',
+      status: 'online' as const,
+      health_score: 97.8,
+      last_heartbeat: new Date(Date.now() - 45 * 1000).toISOString(),
+      version: 'v1.2.3',
+      total_requests: 29800,
+      cache_hit_ratio: 0.92,
+      avg_response_time: 15,
+    },
+  ],
+};

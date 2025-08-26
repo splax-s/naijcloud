@@ -1,0 +1,303 @@
+openapi: 3.0.3
+info:
+  title: NaijCloud D-CDN Control Plane API
+  version: 1.0.0
+  description: Control plane API for managing domains, edges, and cache policies
+
+servers:
+  - url: https://api.naijcloud.com/v1
+
+security:
+  - BearerAuth: []
+
+paths:
+  # Domain Management
+  /domains:
+    get:
+      summary: List registered domains
+      responses:
+        '200':
+          description: List of domains
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  domains:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Domain'
+    post:
+      summary: Register a new domain
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                domain:
+                  type: string
+                  example: "example.com"
+                origin:
+                  type: string
+                  example: "https://origin.example.com"
+                cache_ttl:
+                  type: integer
+                  example: 3600
+              required:
+                - domain
+                - origin
+      responses:
+        '201':
+          description: Domain registered successfully
+        '400':
+          description: Invalid request
+        '409':
+          description: Domain already exists
+
+  /domains/{domain}:
+    get:
+      summary: Get domain configuration
+      parameters:
+        - name: domain
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Domain configuration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Domain'
+    put:
+      summary: Update domain configuration
+      parameters:
+        - name: domain
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                origin:
+                  type: string
+                cache_ttl:
+                  type: integer
+                rate_limit:
+                  type: integer
+      responses:
+        '200':
+          description: Domain updated successfully
+    delete:
+      summary: Delete domain
+      parameters:
+        - name: domain
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Domain deleted successfully
+
+  # Cache Management
+  /domains/{domain}/purge:
+    post:
+      summary: Purge cache for domain
+      parameters:
+        - name: domain
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                paths:
+                  type: array
+                  items:
+                    type: string
+                  example: ["/", "/api/*"]
+      responses:
+        '202':
+          description: Purge request accepted
+
+  # Edge Management
+  /edges:
+    get:
+      summary: List edge nodes
+      responses:
+        '200':
+          description: List of edge nodes
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  edges:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Edge'
+    post:
+      summary: Register edge node
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                region:
+                  type: string
+                  example: "us-east-1"
+                ip_address:
+                  type: string
+                  example: "10.0.1.100"
+                capacity:
+                  type: integer
+                  example: 1000
+              required:
+                - region
+                - ip_address
+      responses:
+        '201':
+          description: Edge registered successfully
+
+  /edges/{edge_id}/heartbeat:
+    post:
+      summary: Edge node heartbeat
+      parameters:
+        - name: edge_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status:
+                  type: string
+                  enum: ["healthy", "degraded", "unhealthy"]
+                metrics:
+                  type: object
+                  properties:
+                    requests_per_second:
+                      type: number
+                    cache_hit_ratio:
+                      type: number
+                    cpu_usage:
+                      type: number
+                    memory_usage:
+                      type: number
+      responses:
+        '200':
+          description: Heartbeat received
+
+  # Analytics
+  /analytics/domains/{domain}:
+    get:
+      summary: Get domain analytics
+      parameters:
+        - name: domain
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: start_time
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: end_time
+          in: query
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: Domain analytics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total_requests:
+                    type: integer
+                  cache_hit_ratio:
+                    type: number
+                  bandwidth_saved:
+                    type: integer
+                  response_times:
+                    type: object
+                    properties:
+                      p50:
+                        type: number
+                      p95:
+                        type: number
+                      p99:
+                        type: number
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    Domain:
+      type: object
+      properties:
+        domain:
+          type: string
+        origin:
+          type: string
+        cache_ttl:
+          type: integer
+        rate_limit:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: ["active", "disabled"]
+
+    Edge:
+      type: object
+      properties:
+        id:
+          type: string
+        region:
+          type: string
+        ip_address:
+          type: string
+        capacity:
+          type: integer
+        status:
+          type: string
+          enum: ["healthy", "degraded", "unhealthy"]
+        last_heartbeat:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
