@@ -1,0 +1,99 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: edge-proxy
+  namespace: naijcloud
+  labels:
+    app: edge-proxy
+spec:
+  selector:
+    matchLabels:
+      app: edge-proxy
+  template:
+    metadata:
+      labels:
+        app: edge-proxy
+    spec:
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      containers:
+      - name: edge-proxy
+        image: naijcloud/edge-proxy:latest
+        ports:
+        - containerPort: 80
+          name: http
+        - containerPort: 443
+          name: https
+        - containerPort: 8081
+          name: health
+        env:
+        - name: CONTROL_PLANE_URL
+          value: "http://control-plane:8080"
+        - name: REDIS_URL
+          valueFrom:
+            secretKeyRef:
+              name: naijcloud-secrets
+              key: REDIS_URL
+        - name: LOG_LEVEL
+          valueFrom:
+            configMapKeyRef:
+              name: naijcloud-config
+              key: LOG_LEVEL
+        - name: NODE_REGION
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.labels['topology.kubernetes.io/region']
+        - name: NODE_HOSTNAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
+        resources:
+          requests:
+            cpu: 500m
+            memory: 512Mi
+          limits:
+            cpu: 2000m
+            memory: 2Gi
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8081
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8081
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        volumeMounts:
+        - name: cache-storage
+          mountPath: /var/cache/naijcloud
+      volumes:
+      - name: cache-storage
+        hostPath:
+          path: /var/cache/naijcloud
+          type: DirectoryOrCreate
+      tolerations:
+      - operator: Exists
+        effect: NoSchedule
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: edge-proxy
+  namespace: naijcloud
+  labels:
+    app: edge-proxy
+spec:
+  selector:
+    app: edge-proxy
+  ports:
+  - port: 80
+    targetPort: 80
+    name: http
+  - port: 443
+    targetPort: 443
+    name: https
+  type: LoadBalancer
+  externalTrafficPolicy: Local

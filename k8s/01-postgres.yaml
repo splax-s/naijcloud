@@ -1,0 +1,181 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-pvc
+  namespace: naijcloud
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 20Gi
+  storageClassName: fast-ssd # Adjust based on your cluster
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+  namespace: naijcloud
+  labels:
+    app: postgres
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:14
+        ports:
+        - containerPort: 5432
+        env:
+        - name: POSTGRES_DB
+          value: naijcloud
+        - name: POSTGRES_USER
+          value: naijcloud
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: naijcloud-secrets
+              key: POSTGRES_PASSWORD
+        - name: PGDATA
+          value: /var/lib/postgresql/data/pgdata
+        volumeMounts:
+        - name: postgres-storage
+          mountPath: /var/lib/postgresql/data
+        - name: init-sql
+          mountPath: /docker-entrypoint-initdb.d
+        resources:
+          requests:
+            cpu: 500m
+            memory: 1Gi
+          limits:
+            cpu: 2000m
+            memory: 4Gi
+        livenessProbe:
+          exec:
+            command:
+            - pg_isready
+            - -U
+            - naijcloud
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          exec:
+            command:
+            - pg_isready
+            - -U
+            - naijcloud
+          initialDelaySeconds: 5
+          periodSeconds: 5
+      volumes:
+      - name: postgres-storage
+        persistentVolumeClaim:
+          claimName: postgres-pvc
+      - name: init-sql
+        configMap:
+          name: postgres-init-sql
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: naijcloud
+spec:
+  selector:
+    app: postgres
+  ports:
+  - port: 5432
+    targetPort: 5432
+  type: ClusterIP
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-init-sql
+  namespace: naijcloud
+data:
+  01-schema.sql: |
+    -- Domain table
+    CREATE TABLE IF NOT EXISTS domains (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        domain VARCHAR(255) UNIQUE NOT NULL,
+        origin VARCHAR(255) NOT NULL,
+        enabled BOOLEAN DEFAULT true,
+        ssl_enabled BOOLEAN DEFAULT true,
+        cache_ttl INTEGER DEFAULT 3600,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    );
+
+    -- Edge nodes table
+    CREATE TABLE IF NOT EXISTS edge_nodes (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        hostname VARCHAR(255) UNIQUE NOT NULL,
+        ip_address INET NOT NULL,
+        region VARCHAR(100) NOT NULL,
+        location VARCHAR(255),
+        status VARCHAR(50) DEFAULT 'offline',
+        health_score INTEGER DEFAULT 100,
+        last_heartbeat TIMESTAMP WITH TIME ZONE,
+        version VARCHAR(50),
+        metadata JSONB DEFAULT '{}',
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    );
+
+    -- Cache entries table
+    CREATE TABLE IF NOT EXISTS cache_entries (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        key VARCHAR(512) NOT NULL,
+        domain_id UUID REFERENCES domains(id) ON DELETE CASCADE,
+        path VARCHAR(1024) NOT NULL,
+        size BIGINT DEFAULT 0,
+        ttl INTEGER DEFAULT 3600,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        expires_at TIMESTAMP WITH TIME ZONE,
+        hit_count INTEGER DEFAULT 0,
+        UNIQUE(key, domain_id)
+    );
+
+    -- Purge requests table
+    CREATE TABLE IF NOT EXISTS purge_requests (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        domain_id UUID REFERENCES domains(id) ON DELETE CASCADE,
+        paths TEXT[],
+        status VARCHAR(50) DEFAULT 'pending',
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        completed_at TIMESTAMP WITH TIME ZONE
+    );
+
+    -- Analytics table
+    CREATE TABLE IF NOT EXISTS analytics (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        domain_id UUID REFERENCES domains(id) ON DELETE CASCADE,
+        timestamp TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        requests INTEGER DEFAULT 0,
+        bytes_transferred BIGINT DEFAULT 0,
+        cache_hits INTEGER DEFAULT 0,
+        cache_misses INTEGER DEFAULT 0,
+        response_time_avg FLOAT DEFAULT 0,
+        status_2xx INTEGER DEFAULT 0,
+        status_3xx INTEGER DEFAULT 0,
+        status_4xx INTEGER DEFAULT 0,
+        status_5xx INTEGER DEFAULT 0
+    );
+
+    -- Indexes for performance
+    CREATE INDEX IF NOT EXISTS idx_domains_domain ON domains(domain);
+    CREATE INDEX IF NOT EXISTS idx_edge_nodes_region ON edge_nodes(region);
+    CREATE INDEX IF NOT EXISTS idx_edge_nodes_status ON edge_nodes(status);
+    CREATE INDEX IF NOT EXISTS idx_cache_entries_domain_id ON cache_entries(domain_id);
+    CREATE INDEX IF NOT EXISTS idx_cache_entries_expires_at ON cache_entries(expires_at);
+    CREATE INDEX IF NOT EXISTS idx_purge_requests_domain_id ON purge_requests(domain_id);
+    CREATE INDEX IF NOT EXISTS idx_purge_requests_status ON purge_requests(status);
+    CREATE INDEX IF NOT EXISTS idx_analytics_domain_id ON analytics(domain_id);
+    CREATE INDEX IF NOT EXISTS idx_analytics_timestamp ON analytics(timestamp);

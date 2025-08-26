@@ -12,6 +12,16 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+// getOrganizationID extracts organization ID from context or uses default
+func getOrganizationID(c *gin.Context) uuid.UUID {
+	if orgID, exists := c.Get("organization_id"); exists {
+		return orgID.(uuid.UUID)
+	}
+	// Use demo organization for backward compatibility
+	// In production, this should be extracted from authentication
+	return uuid.MustParse("3fbdbdad-dbf5-4ac1-9335-e644302769ad") // NaijCloud Demo org
+}
+
 // SetupRoutes configures all API routes
 func SetupRoutes(
 	r *gin.RouterGroup,
@@ -56,7 +66,9 @@ func SetupRoutes(
 // Domain handlers
 func listDomains(service *services.DomainService) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		domains, err := service.ListDomains()
+		orgID := getOrganizationID(c)
+
+		domains, err := service.ListDomains(orgID)
 		if err != nil {
 			logrus.WithError(err).Error("Failed to list domains")
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to list domains"})
@@ -69,13 +81,15 @@ func listDomains(service *services.DomainService) gin.HandlerFunc {
 
 func createDomain(service *services.DomainService) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		orgID := getOrganizationID(c)
+
 		var req models.CreateDomainRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
 
-		domain, err := service.CreateDomain(&req)
+		domain, err := service.CreateDomain(orgID, &req)
 		if err != nil {
 			logrus.WithError(err).WithField("domain", req.Domain).Error("Failed to create domain")
 			if err.Error() == "domain "+req.Domain+" already exists" {
@@ -92,9 +106,10 @@ func createDomain(service *services.DomainService) gin.HandlerFunc {
 
 func getDomain(service *services.DomainService) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		orgID := getOrganizationID(c)
 		domainName := c.Param("domain")
 
-		domain, err := service.GetDomain(domainName)
+		domain, err := service.GetDomain(orgID, domainName)
 		if err != nil {
 			if err.Error() == "domain not found" {
 				c.JSON(http.StatusNotFound, gin.H{"error": "Domain not found"})
@@ -118,7 +133,14 @@ func getDomainByID(service *services.DomainService) gin.HandlerFunc {
 			return
 		}
 
-		domain, err := service.GetDomainByID(domainID)
+		// For backward compatibility, use a default organization ID
+		// In a full multi-tenant implementation, this would come from auth context
+		defaultOrgID := uuid.MustParse("00000000-0000-0000-0000-000000000000")
+		if orgID, exists := c.Get("organization_id"); exists {
+			defaultOrgID = orgID.(uuid.UUID)
+		}
+
+		domain, err := service.GetDomainByID(defaultOrgID, domainID)
 		if err != nil {
 			if err.Error() == "domain not found" {
 				c.JSON(http.StatusNotFound, gin.H{"error": "Domain not found"})
@@ -135,6 +157,7 @@ func getDomainByID(service *services.DomainService) gin.HandlerFunc {
 
 func updateDomain(service *services.DomainService) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		orgID := getOrganizationID(c)
 		domainName := c.Param("domain")
 
 		var req models.UpdateDomainRequest
@@ -143,7 +166,7 @@ func updateDomain(service *services.DomainService) gin.HandlerFunc {
 			return
 		}
 
-		domain, err := service.UpdateDomain(domainName, &req)
+		domain, err := service.UpdateDomain(orgID, domainName, &req)
 		if err != nil {
 			if err.Error() == "domain not found" {
 				c.JSON(http.StatusNotFound, gin.H{"error": "Domain not found"})
@@ -160,9 +183,10 @@ func updateDomain(service *services.DomainService) gin.HandlerFunc {
 
 func deleteDomain(service *services.DomainService) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		orgID := getOrganizationID(c)
 		domainName := c.Param("domain")
 
-		err := service.DeleteDomain(domainName)
+		err := service.DeleteDomain(orgID, domainName)
 		if err != nil {
 			if err.Error() == "domain not found" {
 				c.JSON(http.StatusNotFound, gin.H{"error": "Domain not found"})
@@ -179,10 +203,11 @@ func deleteDomain(service *services.DomainService) gin.HandlerFunc {
 
 func purgeDomainCache(domainService *services.DomainService, cacheService *services.CacheService) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		orgID := getOrganizationID(c)
 		domainName := c.Param("domain")
 
 		// Verify domain exists
-		domain, err := domainService.GetDomain(domainName)
+		domain, err := domainService.GetDomain(orgID, domainName)
 		if err != nil {
 			if err.Error() == "domain not found" {
 				c.JSON(http.StatusNotFound, gin.H{"error": "Domain not found"})

@@ -48,6 +48,10 @@ func main() {
 	analyticsService := services.NewAnalyticsService(db)
 	cacheService := services.NewCacheService(redisClient, edgeService)
 
+	// Initialize multi-tenancy services
+	orgService := services.NewOrganizationService(db)
+	userService := services.NewUserService(db)
+
 	// Setup HTTP server
 	router := gin.New()
 	router.Use(gin.Recovery())
@@ -64,9 +68,8 @@ func main() {
 		c.JSON(http.StatusOK, gin.H{"status": "healthy"})
 	})
 
-	// API routes
-	v1 := router.Group("/v1")
-	api.SetupRoutes(v1, domainService, edgeService, analyticsService, cacheService)
+	// API routes - use multi-tenant setup
+	api.SetupMultiTenantRoutes(router, orgService, userService, domainService, edgeService, analyticsService, cacheService)
 
 	// Metrics server
 	go func() {

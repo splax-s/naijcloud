@@ -25,8 +25,8 @@ func NewDomainService(db *sql.DB, redis *redis.Client) *DomainService {
 	}
 }
 
-// CreateDomain creates a new domain registration
-func (s *DomainService) CreateDomain(req *models.CreateDomainRequest) (*models.Domain, error) {
+// CreateDomain creates a new domain registration for an organization
+func (s *DomainService) CreateDomain(orgID uuid.UUID, req *models.CreateDomainRequest) (*models.Domain, error) {
 	// Check if domain already exists
 	var exists bool
 	err := s.db.QueryRow("SELECT EXISTS(SELECT 1 FROM domains WHERE domain = $1)", req.Domain).Scan(&exists)
@@ -44,21 +44,22 @@ func (s *DomainService) CreateDomain(req *models.CreateDomainRequest) (*models.D
 	}
 
 	domain := &models.Domain{
-		ID:        uuid.New(),
-		Domain:    req.Domain,
-		OriginURL: req.OriginURL,
-		CacheTTL:  cacheTTL,
-		RateLimit: 1000, // Default rate limit
-		Status:    "active",
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
+		ID:             uuid.New(),
+		OrganizationID: &orgID,
+		Domain:         req.Domain,
+		OriginURL:      req.OriginURL,
+		CacheTTL:       cacheTTL,
+		RateLimit:      1000, // Default rate limit
+		Status:         "active",
+		CreatedAt:      time.Now(),
+		UpdatedAt:      time.Now(),
 	}
 
 	query := `
-		INSERT INTO domains (id, domain, origin_url, cache_ttl, rate_limit, status, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		INSERT INTO domains (id, organization_id, domain, origin_url, cache_ttl, rate_limit, status, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 	`
-	_, err = s.db.Exec(query, domain.ID, domain.Domain, domain.OriginURL, domain.CacheTTL,
+	_, err = s.db.Exec(query, domain.ID, domain.OrganizationID, domain.Domain, domain.OriginURL, domain.CacheTTL,
 		domain.RateLimit, domain.Status, domain.CreatedAt, domain.UpdatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create domain: %w", err)
@@ -67,15 +68,18 @@ func (s *DomainService) CreateDomain(req *models.CreateDomainRequest) (*models.D
 	// Cache domain configuration in Redis
 	s.cacheDomainConfig(domain)
 
-	logrus.WithField("domain", domain.Domain).Info("Domain created successfully")
+	logrus.WithFields(logrus.Fields{
+		"domain":          domain.Domain,
+		"organization_id": orgID,
+	}).Info("Domain created successfully")
 	return domain, nil
 }
 
-// GetDomain retrieves a domain by name
-func (s *DomainService) GetDomain(domainName string) (*models.Domain, error) {
+// GetDomain retrieves a domain by name for an organization
+func (s *DomainService) GetDomain(orgID uuid.UUID, domainName string) (*models.Domain, error) {
 	var domain models.Domain
-	row := s.db.QueryRow("SELECT id, domain, origin_url, cache_ttl, rate_limit, status, created_at, updated_at FROM domains WHERE domain = $1", domainName)
-	err := row.Scan(&domain.ID, &domain.Domain, &domain.OriginURL, &domain.CacheTTL, &domain.RateLimit, &domain.Status, &domain.CreatedAt, &domain.UpdatedAt)
+	row := s.db.QueryRow("SELECT id, organization_id, domain, origin_url, cache_ttl, rate_limit, status, created_at, updated_at FROM domains WHERE domain = $1 AND organization_id = $2", domainName, orgID)
+	err := row.Scan(&domain.ID, &domain.OrganizationID, &domain.Domain, &domain.OriginURL, &domain.CacheTTL, &domain.RateLimit, &domain.Status, &domain.CreatedAt, &domain.UpdatedAt)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, fmt.Errorf("domain not found")
@@ -85,11 +89,11 @@ func (s *DomainService) GetDomain(domainName string) (*models.Domain, error) {
 	return &domain, nil
 }
 
-// GetDomainByID retrieves a domain by ID
-func (s *DomainService) GetDomainByID(domainID uuid.UUID) (*models.Domain, error) {
+// GetDomainByID retrieves a domain by ID for an organization
+func (s *DomainService) GetDomainByID(orgID uuid.UUID, domainID uuid.UUID) (*models.Domain, error) {
 	var domain models.Domain
-	row := s.db.QueryRow("SELECT id, domain, origin_url, cache_ttl, rate_limit, status, created_at, updated_at FROM domains WHERE id = $1", domainID)
-	err := row.Scan(&domain.ID, &domain.Domain, &domain.OriginURL, &domain.CacheTTL, &domain.RateLimit, &domain.Status, &domain.CreatedAt, &domain.UpdatedAt)
+	row := s.db.QueryRow("SELECT id, organization_id, domain, origin_url, cache_ttl, rate_limit, status, created_at, updated_at FROM domains WHERE id = $1 AND organization_id = $2", domainID, orgID)
+	err := row.Scan(&domain.ID, &domain.OrganizationID, &domain.Domain, &domain.OriginURL, &domain.CacheTTL, &domain.RateLimit, &domain.Status, &domain.CreatedAt, &domain.UpdatedAt)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, fmt.Errorf("domain not found")
@@ -99,13 +103,13 @@ func (s *DomainService) GetDomainByID(domainID uuid.UUID) (*models.Domain, error
 	return &domain, nil
 }
 
-// ListDomains retrieves all domains
-func (s *DomainService) ListDomains() ([]*models.Domain, error) {
+// ListDomains retrieves all domains for an organization
+func (s *DomainService) ListDomains(orgID uuid.UUID) ([]*models.Domain, error) {
 	query := `
-		SELECT id, domain, origin_url, cache_ttl, rate_limit, status, created_at, updated_at
-		FROM domains ORDER BY created_at DESC
+		SELECT id, organization_id, domain, origin_url, cache_ttl, rate_limit, status, created_at, updated_at
+		FROM domains WHERE organization_id = $1 ORDER BY created_at DESC
 	`
-	rows, err := s.db.Query(query)
+	rows, err := s.db.Query(query, orgID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list domains: %w", err)
 	}
@@ -115,7 +119,7 @@ func (s *DomainService) ListDomains() ([]*models.Domain, error) {
 	for rows.Next() {
 		domain := &models.Domain{}
 		err := rows.Scan(
-			&domain.ID, &domain.Domain, &domain.OriginURL, &domain.CacheTTL,
+			&domain.ID, &domain.OrganizationID, &domain.Domain, &domain.OriginURL, &domain.CacheTTL,
 			&domain.RateLimit, &domain.Status, &domain.CreatedAt, &domain.UpdatedAt,
 		)
 		if err != nil {
@@ -127,10 +131,10 @@ func (s *DomainService) ListDomains() ([]*models.Domain, error) {
 	return domains, nil
 }
 
-// UpdateDomain updates an existing domain
-func (s *DomainService) UpdateDomain(domainName string, req *models.UpdateDomainRequest) (*models.Domain, error) {
+// UpdateDomain updates an existing domain for an organization
+func (s *DomainService) UpdateDomain(orgID uuid.UUID, domainName string, req *models.UpdateDomainRequest) (*models.Domain, error) {
 	// Get existing domain
-	domain, err := s.GetDomain(domainName)
+	domain, err := s.GetDomain(orgID, domainName)
 	if err != nil {
 		return nil, err
 	}
@@ -150,9 +154,9 @@ func (s *DomainService) UpdateDomain(domainName string, req *models.UpdateDomain
 	query := `
 		UPDATE domains 
 		SET origin_url = $1, cache_ttl = $2, rate_limit = $3, updated_at = $4
-		WHERE domain = $5
+		WHERE domain = $5 AND organization_id = $6
 	`
-	_, err = s.db.Exec(query, domain.OriginURL, domain.CacheTTL, domain.RateLimit, domain.UpdatedAt, domainName)
+	_, err = s.db.Exec(query, domain.OriginURL, domain.CacheTTL, domain.RateLimit, domain.UpdatedAt, domainName, orgID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update domain: %w", err)
 	}
@@ -160,13 +164,16 @@ func (s *DomainService) UpdateDomain(domainName string, req *models.UpdateDomain
 	// Update cache
 	s.cacheDomainConfig(domain)
 
-	logrus.WithField("domain", domainName).Info("Domain updated successfully")
+	logrus.WithFields(logrus.Fields{
+		"domain":          domainName,
+		"organization_id": orgID,
+	}).Info("Domain updated successfully")
 	return domain, nil
 }
 
-// DeleteDomain removes a domain
-func (s *DomainService) DeleteDomain(domainName string) error {
-	result, err := s.db.Exec("DELETE FROM domains WHERE domain = $1", domainName)
+// DeleteDomain removes a domain for an organization
+func (s *DomainService) DeleteDomain(orgID uuid.UUID, domainName string) error {
+	result, err := s.db.Exec("DELETE FROM domains WHERE domain = $1 AND organization_id = $2", domainName, orgID)
 	if err != nil {
 		return fmt.Errorf("failed to delete domain: %w", err)
 	}
@@ -182,7 +189,10 @@ func (s *DomainService) DeleteDomain(domainName string) error {
 	// Remove from cache
 	s.redis.Del(context.Background(), fmt.Sprintf("domain:%s", domainName))
 
-	logrus.WithField("domain", domainName).Info("Domain deleted successfully")
+	logrus.WithFields(logrus.Fields{
+		"domain":          domainName,
+		"organization_id": orgID,
+	}).Info("Domain deleted successfully")
 	return nil
 }
 

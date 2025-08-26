@@ -6,80 +6,139 @@ import (
 	"github.com/google/uuid"
 )
 
+// Organization represents a tenant in the multi-tenant system
+type Organization struct {
+	ID          uuid.UUID `json:"id" db:"id"`
+	Name        string    `json:"name" db:"name"`
+	Slug        string    `json:"slug" db:"slug"`
+	Description string    `json:"description" db:"description"`
+	Plan        string    `json:"plan" db:"plan"` // free, basic, pro, enterprise
+	Settings    []byte    `json:"settings" db:"settings"`
+	CreatedAt   time.Time `json:"created_at" db:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at" db:"updated_at"`
+}
+
+// User represents an individual user in the system
+type User struct {
+	ID            uuid.UUID `json:"id" db:"id"`
+	Email         string    `json:"email" db:"email"`
+	Name          string    `json:"name" db:"name"`
+	PasswordHash  string    `json:"-" db:"password_hash"` // Never expose password hash in JSON
+	EmailVerified bool      `json:"email_verified" db:"email_verified"`
+	AvatarURL     string    `json:"avatar_url" db:"avatar_url"`
+	Settings      []byte    `json:"settings" db:"settings"`
+	CreatedAt     time.Time `json:"created_at" db:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at" db:"updated_at"`
+}
+
+// OrganizationMember represents membership in an organization
+type OrganizationMember struct {
+	ID             uuid.UUID  `json:"id" db:"id"`
+	OrganizationID uuid.UUID  `json:"organization_id" db:"organization_id"`
+	UserID         uuid.UUID  `json:"user_id" db:"user_id"`
+	Role           string     `json:"role" db:"role"` // owner, admin, member, viewer
+	Permissions    []byte     `json:"permissions" db:"permissions"`
+	InvitedBy      *uuid.UUID `json:"invited_by" db:"invited_by"`
+	InvitedAt      *time.Time `json:"invited_at" db:"invited_at"`
+	JoinedAt       time.Time  `json:"joined_at" db:"joined_at"`
+	CreatedAt      time.Time  `json:"created_at" db:"created_at"`
+	UpdatedAt      time.Time  `json:"updated_at" db:"updated_at"`
+}
+
+// APIKey represents an API key for programmatic access
+type APIKey struct {
+	ID             uuid.UUID  `json:"id" db:"id"`
+	OrganizationID uuid.UUID  `json:"organization_id" db:"organization_id"`
+	UserID         uuid.UUID  `json:"user_id" db:"user_id"`
+	Name           string     `json:"name" db:"name"`
+	KeyHash        string     `json:"-" db:"key_hash"` // Never expose hash
+	KeyPrefix      string     `json:"key_prefix" db:"key_prefix"`
+	Permissions    []byte     `json:"permissions" db:"permissions"`
+	LastUsedAt     *time.Time `json:"last_used_at" db:"last_used_at"`
+	ExpiresAt      *time.Time `json:"expires_at" db:"expires_at"`
+	CreatedAt      time.Time  `json:"created_at" db:"created_at"`
+	UpdatedAt      time.Time  `json:"updated_at" db:"updated_at"`
+}
+
 // Domain represents a registered domain in the system
 type Domain struct {
-	ID        uuid.UUID `json:"id" db:"id"`
-	Domain    string    `json:"domain" db:"domain"`
-	OriginURL string    `json:"origin_url" db:"origin_url"`
-	CacheTTL  int       `json:"cache_ttl" db:"cache_ttl"`
-	RateLimit int       `json:"rate_limit" db:"rate_limit"`
-	Status    string    `json:"status" db:"status"`
-	CreatedAt time.Time `json:"created_at" db:"created_at"`
-	UpdatedAt time.Time `json:"updated_at" db:"updated_at"`
+	ID             uuid.UUID  `json:"id" db:"id"`
+	OrganizationID *uuid.UUID `json:"organization_id" db:"organization_id"`
+	Domain         string     `json:"domain" db:"domain"`
+	OriginURL      string     `json:"origin_url" db:"origin_url"`
+	CacheTTL       int        `json:"cache_ttl" db:"cache_ttl"`
+	RateLimit      int        `json:"rate_limit" db:"rate_limit"`
+	Status         string     `json:"status" db:"status"`
+	CreatedAt      time.Time  `json:"created_at" db:"created_at"`
+	UpdatedAt      time.Time  `json:"updated_at" db:"updated_at"`
 }
 
 // Edge represents an edge proxy node
 type Edge struct {
-	ID            uuid.UUID   `json:"id" db:"id"`
-	Region        string      `json:"region" db:"region"`
-	IPAddress     string      `json:"ip_address" db:"ip_address"`
-	Hostname      string      `json:"hostname" db:"hostname"`
-	Capacity      int         `json:"capacity" db:"capacity"`
-	Status        string      `json:"status" db:"status"`
-	LastHeartbeat time.Time   `json:"last_heartbeat" db:"last_heartbeat"`
-	CreatedAt     time.Time   `json:"created_at" db:"created_at"`
-	Metadata      interface{} `json:"metadata" db:"metadata"`
+	ID             uuid.UUID   `json:"id" db:"id"`
+	OrganizationID *uuid.UUID  `json:"organization_id" db:"organization_id"`
+	Region         string      `json:"region" db:"region"`
+	IPAddress      string      `json:"ip_address" db:"ip_address"`
+	Hostname       string      `json:"hostname" db:"hostname"`
+	Capacity       int         `json:"capacity" db:"capacity"`
+	Status         string      `json:"status" db:"status"`
+	LastHeartbeat  time.Time   `json:"last_heartbeat" db:"last_heartbeat"`
+	CreatedAt      time.Time   `json:"created_at" db:"created_at"`
+	Metadata       interface{} `json:"metadata" db:"metadata"`
 }
 
 // CachePolicy represents caching rules for a domain
 type CachePolicy struct {
-	ID                uuid.UUID `json:"id" db:"id"`
-	DomainID          uuid.UUID `json:"domain_id" db:"domain_id"`
-	PathPattern       string    `json:"path_pattern" db:"path_pattern"`
-	CacheTTL          int       `json:"cache_ttl" db:"cache_ttl"`
-	CacheKeyTemplate  string    `json:"cache_key_template" db:"cache_key_template"`
-	HeadersToVary     []string  `json:"headers_to_vary" db:"headers_to_vary"`
-	CreatedAt         time.Time `json:"created_at" db:"created_at"`
+	ID               uuid.UUID  `json:"id" db:"id"`
+	OrganizationID   *uuid.UUID `json:"organization_id" db:"organization_id"`
+	DomainID         uuid.UUID  `json:"domain_id" db:"domain_id"`
+	PathPattern      string     `json:"path_pattern" db:"path_pattern"`
+	CacheTTL         int        `json:"cache_ttl" db:"cache_ttl"`
+	CacheKeyTemplate string     `json:"cache_key_template" db:"cache_key_template"`
+	HeadersToVary    []string   `json:"headers_to_vary" db:"headers_to_vary"`
+	CreatedAt        time.Time  `json:"created_at" db:"created_at"`
 }
 
 // RequestLog represents a logged HTTP request
 type RequestLog struct {
-	ID             uuid.UUID `json:"id" db:"id"`
-	DomainID       uuid.UUID `json:"domain_id" db:"domain_id"`
-	EdgeID         uuid.UUID `json:"edge_id" db:"edge_id"`
-	RequestTime    time.Time `json:"request_time" db:"request_time"`
-	Method         string    `json:"method" db:"method"`
-	Path           string    `json:"path" db:"path"`
-	StatusCode     int       `json:"status_code" db:"status_code"`
-	ResponseTimeMs int       `json:"response_time_ms" db:"response_time_ms"`
-	BytesSent      int64     `json:"bytes_sent" db:"bytes_sent"`
-	CacheStatus    string    `json:"cache_status" db:"cache_status"`
-	ClientIP       string    `json:"client_ip" db:"client_ip"`
-	UserAgent      string    `json:"user_agent" db:"user_agent"`
-	Referer        string    `json:"referer" db:"referer"`
+	ID             uuid.UUID  `json:"id" db:"id"`
+	OrganizationID *uuid.UUID `json:"organization_id" db:"organization_id"`
+	DomainID       uuid.UUID  `json:"domain_id" db:"domain_id"`
+	EdgeID         uuid.UUID  `json:"edge_id" db:"edge_id"`
+	RequestTime    time.Time  `json:"request_time" db:"request_time"`
+	Method         string     `json:"method" db:"method"`
+	Path           string     `json:"path" db:"path"`
+	StatusCode     int        `json:"status_code" db:"status_code"`
+	ResponseTimeMs int        `json:"response_time_ms" db:"response_time_ms"`
+	BytesSent      int64      `json:"bytes_sent" db:"bytes_sent"`
+	CacheStatus    string     `json:"cache_status" db:"cache_status"`
+	ClientIP       string     `json:"client_ip" db:"client_ip"`
+	UserAgent      string     `json:"user_agent" db:"user_agent"`
+	Referer        string     `json:"referer" db:"referer"`
 }
 
 // PurgeRequest represents a cache purge operation
 type PurgeRequest struct {
-	ID          uuid.UUID `json:"id" db:"id"`
-	DomainID    uuid.UUID `json:"domain_id" db:"domain_id"`
-	Paths       []string  `json:"paths" db:"paths"`
-	Status      string    `json:"status" db:"status"`
-	RequestedBy string    `json:"requested_by" db:"requested_by"`
-	CreatedAt   time.Time `json:"created_at" db:"created_at"`
-	CompletedAt *time.Time `json:"completed_at" db:"completed_at"`
+	ID             uuid.UUID  `json:"id" db:"id"`
+	OrganizationID *uuid.UUID `json:"organization_id" db:"organization_id"`
+	DomainID       uuid.UUID  `json:"domain_id" db:"domain_id"`
+	Paths          []string   `json:"paths" db:"paths"`
+	Status         string     `json:"status" db:"status"`
+	RequestedBy    string     `json:"requested_by" db:"requested_by"`
+	CreatedAt      time.Time  `json:"created_at" db:"created_at"`
+	CompletedAt    *time.Time `json:"completed_at" db:"completed_at"`
 }
 
 // Analytics represents aggregated analytics data
 type Analytics struct {
-	Domain           string  `json:"domain"`
-	TotalRequests    int64   `json:"total_requests"`
-	CacheHitRatio    float64 `json:"cache_hit_ratio"`
-	BandwidthSaved   int64   `json:"bandwidth_saved"`
-	AvgResponseTime  float64 `json:"avg_response_time"`
-	P50ResponseTime  float64 `json:"p50_response_time"`
-	P95ResponseTime  float64 `json:"p95_response_time"`
-	P99ResponseTime  float64 `json:"p99_response_time"`
+	Domain          string  `json:"domain"`
+	TotalRequests   int64   `json:"total_requests"`
+	CacheHitRatio   float64 `json:"cache_hit_ratio"`
+	BandwidthSaved  int64   `json:"bandwidth_saved"`
+	AvgResponseTime float64 `json:"avg_response_time"`
+	P50ResponseTime float64 `json:"p50_response_time"`
+	P95ResponseTime float64 `json:"p95_response_time"`
+	P99ResponseTime float64 `json:"p99_response_time"`
 }
 
 // CreateDomainRequest represents the request to create a new domain
