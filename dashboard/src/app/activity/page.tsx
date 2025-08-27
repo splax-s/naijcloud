@@ -11,13 +11,22 @@ import {
   BuildingOfficeIcon,
 } from '@heroicons/react/24/outline';
 import { useOrganization } from '@/components/providers/OrganizationProvider';
+import { useAuth } from '@/hooks/useAuth';
+import { apiClient } from '@/lib/api-client';
 
-interface ApiActivityItem {
+interface ActivityApiResponse {
   id: string;
   type: string;
   action: string;
-  target: string;
+  target?: string;
+  resource_id?: string;
   timestamp: string;
+  created_at?: string;
+  user?: {
+    email: string;
+  };
+  ip_address?: string;
+  metadata?: Record<string, unknown>;
 }
 
 interface ActivityItem {
@@ -35,6 +44,7 @@ interface ActivityItem {
 
 export default function ActivityPage() {
   const { organization } = useOrganization();
+  const { isAuthenticated } = useAuth();
   const [activities, setActivities] = useState<ActivityItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<string>('all');
@@ -61,7 +71,7 @@ export default function ActivityPage() {
 
   useEffect(() => {
     const loadActivities = async () => {
-      if (!organization) {
+      if (!organization || !isAuthenticated) {
         setLoading(false);
         return;
       }
@@ -69,30 +79,28 @@ export default function ActivityPage() {
       try {
         setLoading(true);
         
-        // Construct the organization-scoped URL
-        const url = `http://localhost:8080/api/v1/orgs/${organization.slug}/activity`;
-        
-        // Try to fetch real data from API with auth headers
-        const response = await fetch(url, {
-          headers: {
-            'Content-Type': 'application/json',
-            // Add authentication headers here when available
-          }
-        });
-        
-        if (response.ok) {
-          const data = await response.json();
+        // Try to fetch real data from Phase 6 backend using our API client
+        try {
+          const response = await apiClient.getRecentActivity(50); // Get more activities for the full page
+          
           // Transform API response to match our interface
-          const transformedActivities: ActivityItem[] = data.map((item: ApiActivityItem) => ({
-            ...item,
+          const transformedActivities: ActivityItem[] = (response || []).map((item: ActivityApiResponse) => ({
+            id: item.id || Math.random().toString(),
+            type: mapActivityType(item.type || 'info'),
+            action: item.action,
+            target: item.target || item.resource_id,
+            timestamp: item.created_at || item.timestamp || new Date().toISOString(),
             title: item.action || 'Activity',
-            description: `${item.action} for ${item.target}`,
-            // Map types for better categorization
-            type: mapActivityType(item.type)
+            description: `${item.action || 'Activity'} for ${item.target || item.resource_id || 'resource'}`,
+            user_email: item.user?.email,
+            ip_address: item.ip_address,
+            metadata: item.metadata || {}
           }));
           setActivities(transformedActivities);
-        } else {
-          // Fallback to mock data if API is not available
+        } catch (apiError) {
+          console.warn('Real API failed, using mock data:', apiError);
+          
+          // Fallback to mock data if Phase 6 API is not available
           const mockActivities: ActivityItem[] = [
             {
               id: '1',
@@ -139,7 +147,6 @@ export default function ActivityPage() {
         }
       } catch (error) {
         console.error('Failed to load activities:', error);
-        // Set empty array on error
         setActivities([]);
       } finally {
         setLoading(false);
@@ -149,7 +156,7 @@ export default function ActivityPage() {
     loadActivities();
     const interval = setInterval(loadActivities, 30000);
     return () => clearInterval(interval);
-  }, [organization]);
+  }, [organization, isAuthenticated]);
 
   const getActivityIcon = (type: string) => {
     switch (type) {

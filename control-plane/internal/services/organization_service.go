@@ -253,11 +253,145 @@ func (s *OrganizationService) GetOrganizationMembers(ctx context.Context, orgID 
 // CheckSlugExists checks if an organization slug is already taken
 func (s *OrganizationService) CheckSlugExists(ctx context.Context, slug string) (bool, error) {
 	query := `SELECT EXISTS(SELECT 1 FROM organizations WHERE slug = $1 AND deleted_at IS NULL)`
-
+	
 	var exists bool
 	err := s.db.QueryRowContext(ctx, query, slug).Scan(&exists)
 	if err != nil {
 		return false, fmt.Errorf("error checking slug existence: %w", err)
+	}
+
+	return exists, nil
+}
+
+type UserService struct {
+	db *sql.DB
+}
+
+func NewUserService(db *sql.DB) *UserService {
+	return &UserService{db: db}
+}
+
+// GetUser retrieves a user by ID
+func (s *UserService) GetUser(ctx context.Context, userID uuid.UUID) (*models.User, error) {
+	query := `
+		SELECT id, email, name, email_verified, COALESCE(avatar_url, ''), 
+		       COALESCE(settings::text, '{}'), created_at, updated_at
+		FROM users 
+		WHERE id = $1 AND deleted_at IS NULL
+	`
+
+	user := &models.User{}
+	var settingsStr string
+	err := s.db.QueryRowContext(ctx, query, userID).Scan(
+		&user.ID, &user.Email, &user.Name, &user.EmailVerified,
+		&user.AvatarURL, &settingsStr, &user.CreatedAt, &user.UpdatedAt,
+	)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("user not found")
+		}
+		return nil, fmt.Errorf("error retrieving user: %w", err)
+	}
+
+	// Convert settings string to []byte
+	user.Settings = []byte(settingsStr)
+
+	return user, nil
+}
+
+// GetUserByEmail retrieves a user by email
+func (s *UserService) GetUserByEmail(ctx context.Context, email string) (*models.User, error) {
+	query := `
+		SELECT id, email, name, email_verified, COALESCE(avatar_url, ''), 
+		       COALESCE(settings::text, '{}'), created_at, updated_at
+		FROM users 
+		WHERE email = $1 AND deleted_at IS NULL
+	`
+
+	user := &models.User{}
+	var settingsStr string
+	err := s.db.QueryRowContext(ctx, query, email).Scan(
+		&user.ID, &user.Email, &user.Name, &user.EmailVerified,
+		&user.AvatarURL, &settingsStr, &user.CreatedAt, &user.UpdatedAt,
+	)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("user not found")
+		}
+		return nil, fmt.Errorf("error retrieving user: %w", err)
+	}
+
+	// Convert settings string to []byte
+	user.Settings = []byte(settingsStr)
+
+	return user, nil
+} // CreateUser creates a new user
+func (s *UserService) CreateUser(ctx context.Context, email, name, passwordHash string) (*models.User, error) {
+	userID := uuid.New()
+	query := `
+		INSERT INTO users (id, email, name, password_hash)
+		VALUES ($1, $2, $3, $4)
+		RETURNING created_at, updated_at
+	`
+
+	user := &models.User{
+		ID:           userID,
+		Email:        email,
+		Name:         name,
+		PasswordHash: passwordHash,
+	}
+
+	err := s.db.QueryRowContext(ctx, query, userID, email, name, passwordHash).Scan(
+		&user.CreatedAt, &user.UpdatedAt,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("error creating user: %w", err)
+	}
+
+	return user, nil
+}
+
+// GetUserByEmailWithPassword retrieves a user by email including password hash for authentication
+func (s *UserService) GetUserByEmailWithPassword(ctx context.Context, email string) (*models.User, error) {
+	query := `
+		SELECT id, email, name, password_hash, email_verified, 
+		       COALESCE(avatar_url, ''), COALESCE(settings::text, '{}'), 
+		       created_at, updated_at
+		FROM users 
+		WHERE email = $1 AND deleted_at IS NULL
+	`
+
+	user := &models.User{}
+	var settingsStr string
+	err := s.db.QueryRowContext(ctx, query, email).Scan(
+		&user.ID, &user.Email, &user.Name, &user.PasswordHash,
+		&user.EmailVerified, &user.AvatarURL, &settingsStr,
+		&user.CreatedAt, &user.UpdatedAt,
+	)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("user not found")
+		}
+		return nil, fmt.Errorf("error retrieving user: %w", err)
+	}
+
+	// Convert settings string to []byte
+	user.Settings = []byte(settingsStr)
+
+	return user, nil
+}
+
+// CheckEmailExists checks if an email is already registered
+func (s *UserService) CheckEmailExists(ctx context.Context, email string) (bool, error) {
+	query := `SELECT EXISTS(SELECT 1 FROM users WHERE email = $1 AND deleted_at IS NULL)`
+
+	var exists bool
+	err := s.db.QueryRowContext(ctx, query, email).Scan(&exists)
+	if err != nil {
+		return false, fmt.Errorf("error checking email existence: %w", err)
 	}
 
 	return exists, nil

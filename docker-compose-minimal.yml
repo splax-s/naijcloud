@@ -1,0 +1,77 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    ports:
+      - "5434:5432"
+    environment:
+      POSTGRES_DB: naijcloud
+      POSTGRES_USER: naijcloud
+      POSTGRES_PASSWORD: naijcloud_pass
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./control-plane/migrations/001_initial_schema.sql:/docker-entrypoint-initdb.d/001_initial_schema.sql
+      - ./control-plane/migrations/002_add_multi_tenancy.sql:/docker-entrypoint-initdb.d/002_add_multi_tenancy.sql
+      - ./control-plane/migrations/003_add_api_key_authentication.sql:/docker-entrypoint-initdb.d/003_add_api_key_authentication.sql
+      - ./control-plane/migrations/004_add_email_verification.sql:/docker-entrypoint-initdb.d/004_add_email_verification.sql
+      - ./control-plane/migrations/005_add_refresh_tokens.sql:/docker-entrypoint-initdb.d/005_add_refresh_tokens.sql
+      - ./control-plane/migrations/006_add_activity_logs.sql:/docker-entrypoint-initdb.d/006_add_activity_logs.sql
+      - ./control-plane/migrations/007_add_notifications.sql:/docker-entrypoint-initdb.d/007_add_notifications.sql
+      - ./control-plane/migrations/008_add_soft_delete.sql:/docker-entrypoint-initdb.d/008_add_soft_delete.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U naijcloud -d naijcloud"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  control-plane:
+    build:
+      context: ./control-plane
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+      - "9091:9091"
+    environment:
+      - DATABASE_URL=postgres://naijcloud:naijcloud_pass@postgres:5432/naijcloud?sslmode=disable
+      - REDIS_URL=redis://redis:6379/0
+      - JWT_SECRET=your-super-secret-jwt-key-change-in-production
+      - PORT=8080
+      - METRICS_PORT=9091
+      - LOG_LEVEL=info
+      - SMTP_HOST=localhost
+      - SMTP_PORT=587
+      - SMTP_USER=
+      - SMTP_PASSWORD=
+      - SMTP_FROM=noreply@naijcloud.dev
+      - FRONTEND_URL=http://localhost:3001
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+networks:
+  default:
+    name: naijcloud-network
+
+volumes:
+  postgres_data:
+  redis_data:

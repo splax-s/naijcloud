@@ -8,14 +8,15 @@ import (
 
 // Organization represents a tenant in the multi-tenant system
 type Organization struct {
-	ID          uuid.UUID `json:"id" db:"id"`
-	Name        string    `json:"name" db:"name"`
-	Slug        string    `json:"slug" db:"slug"`
-	Description string    `json:"description" db:"description"`
-	Plan        string    `json:"plan" db:"plan"` // free, basic, pro, enterprise
-	Settings    []byte    `json:"settings" db:"settings"`
-	CreatedAt   time.Time `json:"created_at" db:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at" db:"updated_at"`
+	ID          uuid.UUID  `json:"id" db:"id"`
+	Name        string     `json:"name" db:"name"`
+	Slug        string     `json:"slug" db:"slug"`
+	Description string     `json:"description" db:"description"`
+	Plan        string     `json:"plan" db:"plan"` // free, basic, pro, enterprise
+	Settings    []byte     `json:"settings" db:"settings"`
+	CreatedAt   time.Time  `json:"created_at" db:"created_at"`
+	UpdatedAt   time.Time  `json:"updated_at" db:"updated_at"`
+	DeletedAt   *time.Time `json:"deleted_at,omitempty" db:"deleted_at"`
 }
 
 // User represents an individual user in the system
@@ -33,6 +34,7 @@ type User struct {
 	Settings                []byte     `json:"settings" db:"settings"`
 	CreatedAt               time.Time  `json:"created_at" db:"created_at"`
 	UpdatedAt               time.Time  `json:"updated_at" db:"updated_at"`
+	DeletedAt               *time.Time `json:"deleted_at,omitempty" db:"deleted_at"`
 }
 
 // OrganizationMember represents membership in an organization
@@ -65,6 +67,7 @@ type APIKey struct {
 	ExpiresAt      *time.Time `json:"expires_at" db:"expires_at"`
 	CreatedAt      time.Time  `json:"created_at" db:"created_at"`
 	UpdatedAt      time.Time  `json:"updated_at" db:"updated_at"`
+	DeletedAt      *time.Time `json:"deleted_at,omitempty" db:"deleted_at"`
 }
 
 // APIKeyUsage represents usage tracking for API keys
@@ -264,6 +267,100 @@ type ResetPasswordRequest struct {
 type AuthResponse struct {
 	User         *User         `json:"user"`
 	Organization *Organization `json:"organization,omitempty"`
-	AccessToken  string        `json:"access_token,omitempty"`
+	Tokens       *TokenPair    `json:"tokens,omitempty"`
+	AccessToken  string        `json:"access_token,omitempty"` // Deprecated, use Tokens instead
 	Message      string        `json:"message"`
+}
+
+// TokenPair represents access and refresh tokens
+type TokenPair struct {
+	AccessToken  string    `json:"access_token"`
+	RefreshToken string    `json:"refresh_token"`
+	ExpiresAt    time.Time `json:"expires_at"`
+	TokenType    string    `json:"token_type"`
+}
+
+// RefreshTokenRequest represents the request to refresh tokens
+type RefreshTokenRequest struct {
+	RefreshToken string `json:"refresh_token" binding:"required"`
+}
+
+// ChangePasswordRequest represents the request to change password
+type ChangePasswordRequest struct {
+	CurrentPassword string `json:"current_password" binding:"required"`
+	NewPassword     string `json:"new_password" binding:"required,min=8"`
+	ConfirmPassword string `json:"confirm_password" binding:"required"`
+}
+
+// ActivitySummary represents activity statistics
+type ActivitySummary struct {
+	TotalActivities   int64 `json:"total_activities"`
+	UniqueUsers       int64 `json:"unique_users"`
+	ErrorCount        int64 `json:"error_count"`
+	WarningCount      int64 `json:"warning_count"`
+	RecentActivities  int64 `json:"recent_activities"`
+}
+
+// ActionCount represents action frequency statistics
+type ActionCount struct {
+	Action string `json:"action"`
+	Count  int64  `json:"count"`
+}
+
+// RefreshToken represents a JWT refresh token in the database
+type RefreshToken struct {
+	ID        uuid.UUID  `json:"id" db:"id"`
+	UserID    uuid.UUID  `json:"user_id" db:"user_id"`
+	Token     string     `json:"-" db:"token"` // Never expose in JSON
+	ExpiresAt time.Time  `json:"expires_at" db:"expires_at"`
+	RevokedAt *time.Time `json:"revoked_at" db:"revoked_at"`
+	CreatedAt time.Time  `json:"created_at" db:"created_at"`
+	UpdatedAt time.Time  `json:"updated_at" db:"updated_at"`
+}
+
+// ActivityLog represents an activity log entry
+type ActivityLog struct {
+	ID             uuid.UUID              `json:"id" db:"id"`
+	OrganizationID *uuid.UUID             `json:"organization_id" db:"organization_id"`
+	UserID         *uuid.UUID             `json:"user_id" db:"user_id"`
+	Action         string                 `json:"action" db:"action"`
+	ResourceType   string                 `json:"resource_type" db:"resource_type"`
+	ResourceID     *uuid.UUID             `json:"resource_id" db:"resource_id"`
+	Metadata       map[string]interface{} `json:"metadata" db:"metadata"`
+	IPAddress      *string                `json:"ip_address" db:"ip_address"`
+	UserAgent      *string                `json:"user_agent" db:"user_agent"`
+	Severity       string                 `json:"severity" db:"severity"` // info, warning, error, critical
+	CreatedAt      time.Time              `json:"created_at" db:"created_at"`
+}
+
+// Notification represents a user notification
+type Notification struct {
+	ID             uuid.UUID              `json:"id" db:"id"`
+	OrganizationID *uuid.UUID             `json:"organization_id" db:"organization_id"`
+	UserID         uuid.UUID              `json:"user_id" db:"user_id"`
+	Type           string                 `json:"type" db:"type"` // email, in_app, push, sms
+	Channel        string                 `json:"channel" db:"channel"` // email_verification, password_reset, organization_invite, etc.
+	Title          string                 `json:"title" db:"title"`
+	Message        string                 `json:"message" db:"message"`
+	Data           map[string]interface{} `json:"data" db:"data"`
+	Priority       string                 `json:"priority" db:"priority"` // low, normal, high, urgent
+	Status         string                 `json:"status" db:"status"` // pending, sent, delivered, failed, read
+	ScheduledFor   *time.Time             `json:"scheduled_for" db:"scheduled_for"`
+	SentAt         *time.Time             `json:"sent_at" db:"sent_at"`
+	ReadAt         *time.Time             `json:"read_at" db:"read_at"`
+	CreatedAt      time.Time              `json:"created_at" db:"created_at"`
+	UpdatedAt      time.Time              `json:"updated_at" db:"updated_at"`
+}
+
+// NotificationPreferences represents user notification preferences
+type NotificationPreferences struct {
+	ID             uuid.UUID `json:"id" db:"id"`
+	UserID         uuid.UUID `json:"user_id" db:"user_id"`
+	Channel        string    `json:"channel" db:"channel"`
+	EmailEnabled   bool      `json:"email_enabled" db:"email_enabled"`
+	InAppEnabled   bool      `json:"in_app_enabled" db:"in_app_enabled"`
+	PushEnabled    bool      `json:"push_enabled" db:"push_enabled"`
+	SMSEnabled     bool      `json:"sms_enabled" db:"sms_enabled"`
+	CreatedAt      time.Time `json:"created_at" db:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at" db:"updated_at"`
 }

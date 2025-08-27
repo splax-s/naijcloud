@@ -54,6 +54,8 @@ func main() {
 	apiKeyService := services.NewAPIKeyService(db)
 	authService := services.NewAuthService(db)
 	emailService := services.NewEmailService(db)
+	activityService := services.NewActivityService(db)
+	notificationService := services.NewNotificationService(db)
 
 	// Setup HTTP server
 	router := gin.New()
@@ -61,6 +63,10 @@ func main() {
 	router.Use(middleware.Logger())
 	router.Use(middleware.CORS())
 	router.Use(middleware.Metrics())
+	router.Use(middleware.SecurityHeaders())
+
+	// JWT middleware
+	jwtMiddleware := middleware.NewJWTMiddleware(db)
 
 	// Health check endpoint
 	router.GET("/health", func(c *gin.Context) {
@@ -71,8 +77,8 @@ func main() {
 		c.JSON(http.StatusOK, gin.H{"status": "healthy"})
 	})
 
-	// API routes - use multi-tenant setup
-	api.SetupMultiTenantRoutes(router, orgService, userService, domainService, edgeService, analyticsService, cacheService, apiKeyService, authService, emailService)
+	// API routes - use multi-tenant setup with enhanced features
+	api.SetupMultiTenantRoutes(router, orgService, userService, domainService, edgeService, analyticsService, cacheService, apiKeyService, authService, emailService, activityService, notificationService, jwtMiddleware)
 
 	// Metrics server
 	go func() {

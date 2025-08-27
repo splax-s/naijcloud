@@ -506,7 +506,7 @@ func (h *EdgeHandler) GetEdgeMetrics(c *gin.Context) {
 	c.JSON(http.StatusOK, metrics)
 }
 
-// SetupMultiTenantRoutes sets up the multi-tenant API routes
+// SetupMultiTenantRoutes sets up the multi-tenant API routes with enhanced features
 func SetupMultiTenantRoutes(
 	router *gin.Engine,
 	orgService *services.OrganizationService,
@@ -518,12 +518,18 @@ func SetupMultiTenantRoutes(
 	apiKeyService *services.APIKeyService,
 	authService *services.AuthService,
 	emailService *services.EmailService,
+	activityService *services.ActivityService,
+	notificationService *services.NotificationService,
+	jwtMiddleware *middleware.JWTMiddleware,
 ) {
-	// Create auth handler
+	// Create handlers
 	authHandler := NewAuthHandler(authService)
-
-	// Create email handler
 	emailHandler := NewEmailHandler(emailService, userService)
+	
+	// Enhanced handlers
+	enhancedAuthHandlers := NewAuthAPIHandlers(authService, notificationService)
+	activityHandlers := NewActivityAPIHandlers(activityService)
+	notificationHandlers := NewNotificationAPIHandlers(notificationService)
 
 	// Public authentication routes (no auth required)
 	auth := router.Group("/api/v1/auth")
@@ -538,6 +544,36 @@ func SetupMultiTenantRoutes(
 		auth.POST("/verify-email", emailHandler.VerifyEmail)
 		auth.POST("/forgot-password", emailHandler.RequestPasswordReset)
 		auth.POST("/reset-password", emailHandler.ResetPassword)
+		
+		// Enhanced JWT authentication routes
+		auth.POST("/refresh", enhancedAuthHandlers.RefreshToken)
+	}
+	
+	// Protected authentication routes (require JWT)
+	protectedAuth := router.Group("/api/v1/auth")
+	protectedAuth.Use(jwtMiddleware.RequireAuth())
+	{
+		protectedAuth.POST("/logout", enhancedAuthHandlers.Logout)
+		protectedAuth.POST("/change-password", enhancedAuthHandlers.ChangePassword)
+		protectedAuth.GET("/profile", enhancedAuthHandlers.GetProfile)
+	}
+	
+	// Activity logging routes
+	activities := router.Group("/api/v1/activities")
+	activities.Use(jwtMiddleware.RequireAuth())
+	{
+		activities.GET("", activityHandlers.GetActivities)
+		activities.GET("/summary", activityHandlers.GetActivitySummary)
+	}
+	
+	// Notification routes
+	notifications := router.Group("/api/v1/notifications")
+	notifications.Use(jwtMiddleware.RequireAuth())
+	{
+		notifications.GET("", notificationHandlers.GetNotifications)
+		notifications.POST("/:id/read", notificationHandlers.MarkNotificationAsRead)
+		notifications.POST("/mark-all-read", notificationHandlers.MarkAllNotificationsAsRead)
+		notifications.GET("/unread-count", notificationHandlers.GetUnreadCount)
 	}
 
 	// Setup organization routes

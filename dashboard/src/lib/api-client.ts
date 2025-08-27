@@ -12,6 +12,7 @@ import {
 } from './types';
 import { mockData } from './mock-data';
 import { getSession } from 'next-auth/react';
+import { ExtendedSession } from '../hooks/useAuth';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
 
@@ -50,17 +51,22 @@ class ApiClient {
     return new ApiClient(API_BASE_URL, { organizationSlug });
   }
 
-  // Endpoints that exist in the Go backend
+  // Endpoints that exist in the Go backend (Phase 6)
   private readonly realEndpoints = [
+    '/auth', // Authentication endpoints
+    '/users', // User management
+    '/organizations', // Organization management  
+    '/api-keys', // API key management
+    '/activity', // Activity logs
+    '/notifications', // Notifications
+    '/health', // Health check
+    '/metrics', // Basic metrics
+    '/admin', // Admin endpoints
+    // Future Phase 7 endpoints:
     '/domains',
     '/edges', 
     '/analytics',
-    '/metrics/dashboard',
-    '/metrics/traffic',
-    '/metrics/top-domains',
-    '/activity',
-    '/health', // Add health endpoint
-    '/orgs' // Organization endpoints
+    '/cache'
   ];
 
   private isRealEndpoint(endpoint: string): boolean {
@@ -68,11 +74,17 @@ class ApiClient {
   }
 
   private async getAuthHeaders(): Promise<Record<string, string>> {
-    const session = await getSession();
+    const session = await getSession() as ExtendedSession | null;
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     };
 
+    // Use JWT token if available (Phase 6 backend)
+    if (session?.accessToken) {
+      headers['Authorization'] = `Bearer ${session.accessToken}`;
+    }
+
+    // Fallback to user ID headers for mock/testing
     if (session?.user) {
       headers['X-User-ID'] = session.user.id;
       headers['X-User-Email'] = session.user.email || '';

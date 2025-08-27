@@ -2,6 +2,7 @@
 
 import { StatsCards } from '@/components/dashboard/StatsCards';
 import { RecentActivity } from '@/components/dashboard/RecentActivity';
+import { RealTimeActivity } from '@/components/dashboard/RealTimeActivity';
 import { TrafficChart } from '@/components/dashboard/TrafficChart';
 import { TopDomains } from '@/components/dashboard/TopDomains';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
@@ -22,13 +23,18 @@ export default function DashboardPage() {
         <StatsCards />
 
         {/* Main Content Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Traffic Chart */}
-          <TrafficChart />
+          <div className="lg:col-span-2">
+            <TrafficChart />
+          </div>
 
-          {/* Recent Activity */}
+          {/* Recent Activity (Mock) */}
           <RecentActivity />
         </div>
+
+        {/* Real-time Activity from Phase 6 Backend */}
+        <RealTimeActivity />
 
         {/* Top Domains */}
         <TopDomains />
