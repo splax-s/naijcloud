@@ -1,11 +1,23 @@
 'use client';
 
-import { GlobeAltIcon, ClockIcon, CheckCircleIcon } from '@heroicons/react/24/outline';
+import { 
+  GlobeAltIcon, 
+  ClockIcon, 
+  CheckCircleIcon,
+  ServerIcon,
+  ShieldCheckIcon,
+  CircleStackIcon,
+  ExclamationTriangleIcon,
+  CpuChipIcon
+} from '@heroicons/react/24/outline';
 import { useRecentActivity } from '@/lib/hooks';
 import { LoadingCard, ErrorCard } from '@/components/ui/Loading';
+import { formatDistanceToNow } from 'date-fns';
+import { useOrganization } from '@/components/providers/OrganizationProvider';
 
 export function RecentActivity() {
-  const { recentActivity, isLoading, isError, mutate } = useRecentActivity(5);
+  const { organization } = useOrganization();
+  const { recentActivity, isLoading, isError, mutate } = useRecentActivity(6, organization?.slug);
 
   if (isLoading) {
     return (
@@ -30,6 +42,7 @@ export function RecentActivity() {
     ...activity,
     icon: getIconForActivityType(activity.type),
     iconBackground: getIconBackgroundForActivityType(activity.type),
+    formattedTime: formatDistanceToNow(new Date(activity.timestamp), { addSuffix: true }),
   })) || [];
 
   function getIconForActivityType(type: string) {
@@ -38,8 +51,16 @@ export function RecentActivity() {
         return GlobeAltIcon;
       case 'cache':
         return ClockIcon;
-      case 'health':
-        return CheckCircleIcon;
+      case 'edge':
+        return ServerIcon;
+      case 'system':
+        return CpuChipIcon;
+      case 'security':
+        return ShieldCheckIcon;
+      case 'database':
+        return CircleStackIcon;
+      case 'monitoring':
+        return ExclamationTriangleIcon;
       default:
         return CheckCircleIcon;
     }
@@ -51,8 +72,16 @@ export function RecentActivity() {
         return 'bg-blue-500';
       case 'cache':
         return 'bg-yellow-500';
-      case 'health':
+      case 'edge':
         return 'bg-green-500';
+      case 'system':
+        return 'bg-purple-500';
+      case 'security':
+        return 'bg-indigo-500';
+      case 'database':
+        return 'bg-cyan-500';
+      case 'monitoring':
+        return 'bg-orange-500';
       default:
         return 'bg-gray-500';
     }
@@ -78,7 +107,7 @@ export function RecentActivity() {
                 <p className="text-sm text-gray-500">{activity.target}</p>
               </div>
               <div className="flex-shrink-0 text-sm text-gray-500">
-                {activity.timestamp}
+                {activity.formattedTime}
               </div>
             </div>
           </div>
@@ -86,7 +115,7 @@ export function RecentActivity() {
       </div>
       <div className="px-6 py-3 bg-gray-50 border-t border-gray-200">
         <a
-          href="#"
+          href="/activity"
           className="text-sm font-medium text-blue-600 hover:text-blue-500"
         >
           View all activity →

@@ -15,8 +15,34 @@ export const authOptions: NextAuthOptions = {
           return null;
         }
 
-        // For MVP, we'll use a simple hardcoded admin user
-        // In production, this would validate against your user database
+        try {
+          // Try authenticating with our backend API first
+          const response = await fetch('http://localhost:8080/api/v1/auth/login', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              email: credentials.email,
+              password: credentials.password,
+            }),
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            return {
+              id: data.user.id,
+              email: data.user.email,
+              name: data.user.name,
+              role: 'user',
+              organization: data.organization,
+            };
+          }
+        } catch (error) {
+          console.error('Backend auth failed:', error);
+        }
+
+        // Fallback to hardcoded admin for demo
         if (
           credentials.email === 'admin@naijcloud.com' && 
           credentials.password === 'password'
@@ -26,6 +52,11 @@ export const authOptions: NextAuthOptions = {
             email: 'admin@naijcloud.com',
             name: 'NaijCloud Admin',
             role: 'admin',
+            organization: {
+              id: '3fbdbdad-dbf5-4ac1-9335-e644302769ad',
+              name: 'NaijCloud Demo',
+              slug: 'naijcloud-demo',
+            },
           };
         }
 
@@ -41,12 +72,16 @@ export const authOptions: NextAuthOptions = {
       if (user?.role) {
         token.role = user.role;
       }
+      if (user?.organization) {
+        token.organization = user.organization;
+      }
       return token;
     },
     async session({ session, token }) {
       if (token?.sub) {
         session.user.id = token.sub;
         session.user.role = token.role;
+        session.user.organization = token.organization;
       }
       return session;
     },

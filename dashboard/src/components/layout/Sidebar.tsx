@@ -13,6 +13,9 @@ import {
   TrashIcon,
   UserIcon,
   ArrowRightOnRectangleIcon,
+  KeyIcon,
+  BuildingOfficeIcon,
+  BellIcon,
 } from '@heroicons/react/24/outline';
 import { clsx } from 'clsx';
 
@@ -22,6 +25,9 @@ const navigation = [
   { name: 'Analytics', href: '/analytics', icon: ChartBarIcon },
   { name: 'Edge Nodes', href: '/edges', icon: ServerIcon },
   { name: 'Cache Management', href: '/cache', icon: TrashIcon },
+  { name: 'Activity', href: '/activity', icon: BellIcon },
+  { name: 'API Keys', href: '/api-keys', icon: KeyIcon },
+  { name: 'Organizations', href: '/organizations', icon: BuildingOfficeIcon },
   { name: 'Settings', href: '/settings', icon: Cog6ToothIcon },
 ];
 

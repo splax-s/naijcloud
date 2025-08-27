@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -236,6 +237,248 @@ func (s *EdgeService) DeleteEdge(edgeID uuid.UUID) error {
 	s.redis.Del(context.Background(), fmt.Sprintf("edge:%s", edgeID))
 
 	logrus.WithField("edge_id", edgeID).Info("Edge node deleted successfully")
+	return nil
+}
+
+// Organization-scoped edge management methods
+
+// ListEdgesByOrganization retrieves all edge nodes for a specific organization
+func (s *EdgeService) ListEdgesByOrganization(orgID uuid.UUID) ([]models.Edge, error) {
+	query := `
+		SELECT id, organization_id, region, ip_address, hostname, capacity, status, 
+		       last_heartbeat, created_at, metadata
+		FROM edges 
+		WHERE organization_id = $1 OR organization_id IS NULL
+		ORDER BY created_at DESC
+	`
+	
+	rows, err := s.db.Query(query, orgID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query edges: %w", err)
+	}
+	defer rows.Close()
+
+	var edges []models.Edge
+	for rows.Next() {
+		var edge models.Edge
+		var metadataBytes []byte
+		
+		err := rows.Scan(
+			&edge.ID, &edge.OrganizationID, &edge.Region, &edge.IPAddress,
+			&edge.Hostname, &edge.Capacity, &edge.Status, &edge.LastHeartbeat,
+			&edge.CreatedAt, &metadataBytes,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan edge: %w", err)
+		}
+
+		// Parse metadata JSON
+		if len(metadataBytes) > 0 {
+			var metadata map[string]interface{}
+			if err := json.Unmarshal(metadataBytes, &metadata); err == nil {
+				edge.Metadata = metadata
+			}
+		}
+
+		edges = append(edges, edge)
+	}
+
+	return edges, nil
+}
+
+// GetEdgeByOrganization retrieves a specific edge node for an organization
+func (s *EdgeService) GetEdgeByOrganization(orgID, edgeID uuid.UUID) (*models.Edge, error) {
+	query := `
+		SELECT id, organization_id, region, ip_address, hostname, capacity, status, 
+		       last_heartbeat, created_at, metadata
+		FROM edges 
+		WHERE id = $1 AND (organization_id = $2 OR organization_id IS NULL)
+	`
+	
+	var edge models.Edge
+	var metadataBytes []byte
+	
+	err := s.db.QueryRow(query, edgeID, orgID).Scan(
+		&edge.ID, &edge.OrganizationID, &edge.Region, &edge.IPAddress,
+		&edge.Hostname, &edge.Capacity, &edge.Status, &edge.LastHeartbeat,
+		&edge.CreatedAt, &metadataBytes,
+	)
+	
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("edge not found")
+		}
+		return nil, fmt.Errorf("failed to get edge: %w", err)
+	}
+
+	// Parse metadata JSON
+	if len(metadataBytes) > 0 {
+		var metadata map[string]interface{}
+		if err := json.Unmarshal(metadataBytes, &metadata); err == nil {
+			edge.Metadata = metadata
+		}
+	}
+
+	return &edge, nil
+}
+
+// RegisterEdgeForOrganization registers a new edge node for a specific organization
+func (s *EdgeService) RegisterEdgeForOrganization(orgID uuid.UUID, req *models.RegisterEdgeRequest) (*models.Edge, error) {
+	edge := &models.Edge{
+		ID:             uuid.New(),
+		OrganizationID: &orgID,
+		Region:         req.Region,
+		IPAddress:      req.IPAddress,
+		Hostname:       req.Hostname,
+		Capacity:       req.Capacity,
+		Status:         "healthy",
+		LastHeartbeat:  time.Now(),
+		CreatedAt:      time.Now(),
+		Metadata:       make(map[string]interface{}),
+	}
+
+	// Set default hostname if not provided
+	if edge.Hostname == "" {
+		edge.Hostname = fmt.Sprintf("edge-%s", edge.ID.String()[:8])
+	}
+
+	// Set default capacity if not provided
+	if edge.Capacity == 0 {
+		edge.Capacity = 1000
+	}
+
+	// Serialize metadata
+	metadataBytes, err := json.Marshal(edge.Metadata)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal metadata: %w", err)
+	}
+
+	query := `
+		INSERT INTO edges (id, organization_id, region, ip_address, hostname, capacity, status, last_heartbeat, metadata)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+	`
+
+	_, err = s.db.Exec(query, edge.ID, edge.OrganizationID, edge.Region, edge.IPAddress, 
+		edge.Hostname, edge.Capacity, edge.Status, edge.LastHeartbeat, metadataBytes)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create edge: %w", err)
+	}
+
+	logrus.WithFields(logrus.Fields{
+		"edge_id":         edge.ID,
+		"organization_id": orgID,
+		"region":          edge.Region,
+		"hostname":        edge.Hostname,
+	}).Info("Edge node registered for organization")
+
+	return edge, nil
+}
+
+// UpdateEdgeForOrganization updates an edge node for a specific organization
+func (s *EdgeService) UpdateEdgeForOrganization(orgID, edgeID uuid.UUID, updates map[string]interface{}) (*models.Edge, error) {
+	// First verify the edge belongs to this organization
+	edge, err := s.GetEdgeByOrganization(orgID, edgeID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Build dynamic update query
+	setParts := []string{}
+	args := []interface{}{}
+	argIndex := 1
+
+	for field, value := range updates {
+		switch field {
+		case "region", "hostname", "capacity", "status":
+			setParts = append(setParts, fmt.Sprintf("%s = $%d", field, argIndex))
+			args = append(args, value)
+			argIndex++
+		case "metadata":
+			metadataBytes, err := json.Marshal(value)
+			if err != nil {
+				return nil, fmt.Errorf("failed to marshal metadata: %w", err)
+			}
+			setParts = append(setParts, fmt.Sprintf("metadata = $%d", argIndex))
+			args = append(args, metadataBytes)
+			argIndex++
+		}
+	}
+
+	if len(setParts) == 0 {
+		return edge, nil // No updates to make
+	}
+
+	// Add updated_at timestamp
+	setParts = append(setParts, fmt.Sprintf("updated_at = $%d", argIndex))
+	args = append(args, time.Now())
+	argIndex++
+
+	// Add WHERE clause parameters
+	args = append(args, edgeID, orgID)
+
+	query := fmt.Sprintf(`
+		UPDATE edges 
+		SET %s
+		WHERE id = $%d AND (organization_id = $%d OR organization_id IS NULL)
+		RETURNING id, organization_id, region, ip_address, hostname, capacity, status, 
+		          last_heartbeat, created_at, metadata
+	`, strings.Join(setParts, ", "), argIndex-1, argIndex)
+
+	var updatedEdge models.Edge
+	var metadataBytes []byte
+
+	err = s.db.QueryRow(query, args...).Scan(
+		&updatedEdge.ID, &updatedEdge.OrganizationID, &updatedEdge.Region, 
+		&updatedEdge.IPAddress, &updatedEdge.Hostname, &updatedEdge.Capacity, 
+		&updatedEdge.Status, &updatedEdge.LastHeartbeat, &updatedEdge.CreatedAt, 
+		&metadataBytes,
+	)
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to update edge: %w", err)
+	}
+
+	// Parse metadata JSON
+	if len(metadataBytes) > 0 {
+		var metadata map[string]interface{}
+		if err := json.Unmarshal(metadataBytes, &metadata); err == nil {
+			updatedEdge.Metadata = metadata
+		}
+	}
+
+	// Remove from cache
+	s.redis.Del(context.Background(), fmt.Sprintf("edge:%s", edgeID))
+
+	return &updatedEdge, nil
+}
+
+// DeleteEdgeForOrganization removes an edge node for a specific organization
+func (s *EdgeService) DeleteEdgeForOrganization(orgID, edgeID uuid.UUID) error {
+	result, err := s.db.Exec(`
+		DELETE FROM edges 
+		WHERE id = $1 AND (organization_id = $2 OR organization_id IS NULL)
+	`, edgeID, orgID)
+	
+	if err != nil {
+		return fmt.Errorf("failed to delete edge: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+	if rowsAffected == 0 {
+		return fmt.Errorf("edge not found or access denied")
+	}
+
+	// Remove from cache
+	s.redis.Del(context.Background(), fmt.Sprintf("edge:%s", edgeID))
+
+	logrus.WithFields(logrus.Fields{
+		"edge_id":         edgeID,
+		"organization_id": orgID,
+	}).Info("Edge node deleted for organization")
+
 	return nil
 }
 

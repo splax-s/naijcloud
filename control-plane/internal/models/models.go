@@ -20,15 +20,19 @@ type Organization struct {
 
 // User represents an individual user in the system
 type User struct {
-	ID            uuid.UUID `json:"id" db:"id"`
-	Email         string    `json:"email" db:"email"`
-	Name          string    `json:"name" db:"name"`
-	PasswordHash  string    `json:"-" db:"password_hash"` // Never expose password hash in JSON
-	EmailVerified bool      `json:"email_verified" db:"email_verified"`
-	AvatarURL     string    `json:"avatar_url" db:"avatar_url"`
-	Settings      []byte    `json:"settings" db:"settings"`
-	CreatedAt     time.Time `json:"created_at" db:"created_at"`
-	UpdatedAt     time.Time `json:"updated_at" db:"updated_at"`
+	ID                      uuid.UUID  `json:"id" db:"id"`
+	Email                   string     `json:"email" db:"email"`
+	Name                    string     `json:"name" db:"name"`
+	PasswordHash            string     `json:"-" db:"password_hash"` // Never expose password hash in JSON
+	EmailVerified           bool       `json:"email_verified" db:"email_verified"`
+	EmailVerificationToken  *string    `json:"-" db:"email_verification_token"` // Never expose token in JSON
+	EmailVerificationExpiry *time.Time `json:"-" db:"email_verification_expiry"`
+	PasswordResetToken      *string    `json:"-" db:"password_reset_token"` // Never expose token in JSON
+	PasswordResetExpiry     *time.Time `json:"-" db:"password_reset_expiry"`
+	AvatarURL               string     `json:"avatar_url" db:"avatar_url"`
+	Settings                []byte     `json:"settings" db:"settings"`
+	CreatedAt               time.Time  `json:"created_at" db:"created_at"`
+	UpdatedAt               time.Time  `json:"updated_at" db:"updated_at"`
 }
 
 // OrganizationMember represents membership in an organization
@@ -54,10 +58,29 @@ type APIKey struct {
 	KeyHash        string     `json:"-" db:"key_hash"` // Never expose hash
 	KeyPrefix      string     `json:"key_prefix" db:"key_prefix"`
 	Permissions    []byte     `json:"permissions" db:"permissions"`
+	Scopes         []string   `json:"scopes" db:"scopes"`
+	RateLimit      int        `json:"rate_limit" db:"rate_limit"`
 	LastUsedAt     *time.Time `json:"last_used_at" db:"last_used_at"`
+	LastUsedIP     *string    `json:"last_used_ip" db:"last_used_ip"`
 	ExpiresAt      *time.Time `json:"expires_at" db:"expires_at"`
 	CreatedAt      time.Time  `json:"created_at" db:"created_at"`
 	UpdatedAt      time.Time  `json:"updated_at" db:"updated_at"`
+}
+
+// APIKeyUsage represents usage tracking for API keys
+type APIKeyUsage struct {
+	ID                uuid.UUID `json:"id" db:"id"`
+	APIKeyID          uuid.UUID `json:"api_key_id" db:"api_key_id"`
+	OrganizationID    uuid.UUID `json:"organization_id" db:"organization_id"`
+	Endpoint          string    `json:"endpoint" db:"endpoint"`
+	Method            string    `json:"method" db:"method"`
+	StatusCode        int       `json:"status_code" db:"status_code"`
+	ResponseTimeMs    *int      `json:"response_time_ms" db:"response_time_ms"`
+	RequestSizeBytes  *int64    `json:"request_size_bytes" db:"request_size_bytes"`
+	ResponseSizeBytes *int64    `json:"response_size_bytes" db:"response_size_bytes"`
+	ClientIP          *string   `json:"client_ip" db:"client_ip"`
+	UserAgent         *string   `json:"user_agent" db:"user_agent"`
+	CreatedAt         time.Time `json:"created_at" db:"created_at"`
 }
 
 // Domain represents a registered domain in the system
@@ -172,4 +195,75 @@ type HeartbeatRequest struct {
 // PurgeRequestBody represents a cache purge request
 type PurgeRequestBody struct {
 	Paths []string `json:"paths"`
+}
+
+// CreateAPIKeyRequest represents the request to create a new API key
+type CreateAPIKeyRequest struct {
+	Name        string              `json:"name" binding:"required"`
+	Scopes      []string            `json:"scopes" binding:"required"`
+	RateLimit   int                 `json:"rate_limit"`
+	ExpiresAt   *string             `json:"expires_at"` // ISO 8601 date string
+	Permissions map[string][]string `json:"permissions"`
+}
+
+// UpdateAPIKeyRequest represents the request to update an API key
+type UpdateAPIKeyRequest struct {
+	Name        string              `json:"name"`
+	Scopes      []string            `json:"scopes"`
+	RateLimit   int                 `json:"rate_limit"`
+	ExpiresAt   *string             `json:"expires_at"` // ISO 8601 date string
+	Permissions map[string][]string `json:"permissions"`
+}
+
+// CreateAPIKeyResponse represents the response when creating an API key
+type CreateAPIKeyResponse struct {
+	APIKey   *APIKey `json:"api_key"`
+	PlainKey string  `json:"plain_key"` // Only returned once during creation
+	Warning  string  `json:"warning,omitempty"`
+}
+
+// RegisterUserRequest represents the request to register a new user
+type RegisterUserRequest struct {
+	Email            string `json:"email" binding:"required,email"`
+	Name             string `json:"name" binding:"required"`
+	Password         string `json:"password" binding:"required,min=8"`
+	ConfirmPassword  string `json:"confirm_password" binding:"required"`
+	OrganizationName string `json:"organization_name" binding:"required"`
+	OrganizationSlug string `json:"organization_slug" binding:"required"`
+}
+
+// LoginRequest represents the request to authenticate a user
+type LoginRequest struct {
+	Email    string `json:"email" binding:"required,email"`
+	Password string `json:"password" binding:"required"`
+}
+
+// SendEmailVerificationRequest represents the request to send email verification
+type SendEmailVerificationRequest struct {
+	Email string `json:"email" binding:"required,email"`
+}
+
+// VerifyEmailRequest represents the request to verify email with token
+type VerifyEmailRequest struct {
+	Token string `json:"token" binding:"required"`
+}
+
+// RequestPasswordResetRequest represents the request to reset password
+type RequestPasswordResetRequest struct {
+	Email string `json:"email" binding:"required,email"`
+}
+
+// ResetPasswordRequest represents the request to reset password with token
+type ResetPasswordRequest struct {
+	Token           string `json:"token" binding:"required"`
+	Password        string `json:"password" binding:"required,min=8"`
+	ConfirmPassword string `json:"confirm_password" binding:"required"`
+}
+
+// AuthResponse represents the response after successful authentication
+type AuthResponse struct {
+	User         *User         `json:"user"`
+	Organization *Organization `json:"organization,omitempty"`
+	AccessToken  string        `json:"access_token,omitempty"`
+	Message      string        `json:"message"`
 }

@@ -3,9 +3,11 @@
 import { GlobeAltIcon } from '@heroicons/react/24/outline';
 import { useTopDomains } from '@/lib/hooks';
 import { LoadingCard, ErrorCard } from '@/components/ui/Loading';
+import { useOrganization } from '@/components/providers/OrganizationProvider';
 
 export function TopDomains() {
-  const { topDomains, isLoading, isError, mutate } = useTopDomains(5);
+  const { organization } = useOrganization();
+  const { topDomains, isLoading, isError, mutate } = useTopDomains(5, organization?.slug);
 
   if (isLoading) {
     return (

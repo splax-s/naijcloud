@@ -11,9 +11,11 @@ import {
 } from 'recharts';
 import { useTrafficData } from '@/lib/hooks';
 import { LoadingCard, ErrorCard } from '@/components/ui/Loading';
+import { useOrganization } from '@/components/providers/OrganizationProvider';
 
 export function TrafficChart() {
-  const { trafficData, isLoading, isError, mutate } = useTrafficData(24);
+  const { organization } = useOrganization();
+  const { trafficData, isLoading, isError, mutate } = useTrafficData(24, organization?.slug);
 
   if (isLoading) {
     return (

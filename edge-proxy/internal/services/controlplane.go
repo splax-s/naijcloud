@@ -81,7 +81,7 @@ func (c *ControlPlaneClient) RegisterEdge(ctx context.Context, ipAddress, hostna
 	}
 
 	var resp EdgeRegistrationResponse
-	if err := c.makeRequest(ctx, "POST", "/v1/edges", req, &resp); err != nil {
+	if err := c.makeRequest(ctx, "POST", "/api/v1/edges", req, &resp); err != nil {
 		return nil, fmt.Errorf("failed to register edge: %w", err)
 	}
 
@@ -105,7 +105,7 @@ func (c *ControlPlaneClient) SendHeartbeat(ctx context.Context, status string, m
 		Metrics: metrics,
 	}
 
-	endpoint := fmt.Sprintf("/v1/edges/%s/heartbeat", c.edgeID)
+	endpoint := fmt.Sprintf("/api/v1/edges/%s/heartbeat", c.edgeID)
 	return c.makeRequest(ctx, "POST", endpoint, req, nil)
 }
 
@@ -140,7 +140,7 @@ func (c *ControlPlaneClient) GetPendingPurges(ctx context.Context) ([]PurgeReque
 	var response struct {
 		Purges []PurgeRequest `json:"purges"`
 	}
-	endpoint := fmt.Sprintf("/v1/edges/%s/purges", c.edgeID)
+	endpoint := fmt.Sprintf("/api/v1/edges/%s/purges", c.edgeID)
 
 	if err := c.makeRequest(ctx, "GET", endpoint, nil, &response); err != nil {
 		return nil, fmt.Errorf("failed to get pending purges: %w", err)
@@ -154,7 +154,7 @@ func (c *ControlPlaneClient) CompletePurge(ctx context.Context, purgeID uuid.UUI
 		return fmt.Errorf("edge not registered")
 	}
 
-	endpoint := fmt.Sprintf("/v1/edges/%s/purges/%s/complete", c.edgeID, purgeID)
+	endpoint := fmt.Sprintf("/api/v1/edges/%s/purges/%s/complete", c.edgeID, purgeID)
 	return c.makeRequest(ctx, "POST", endpoint, nil, nil)
 }
 

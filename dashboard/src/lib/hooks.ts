@@ -2,10 +2,18 @@ import useSWR from 'swr';
 import { apiClient } from './api-client';
 import { Domain, EdgeNode, CacheEntry, Analytics } from './types';
 
+// Hook to create organization-scoped API client
+function useOrganizationApiClient(organizationSlug?: string | null) {
+  if (!organizationSlug) return apiClient;
+  return apiClient.forOrganization(organizationSlug);
+}
+
 // Domain hooks
-export function useDomains() {
-  const { data, error, isLoading, mutate } = useSWR<Domain[]>('/api/domains', () => 
-    apiClient.getDomains()
+export function useDomains(organizationSlug?: string | null) {
+  const client = useOrganizationApiClient(organizationSlug);
+  const { data, error, isLoading, mutate } = useSWR<Domain[]>(
+    organizationSlug ? `/orgs/${organizationSlug}/domains` : '/api/domains', 
+    () => client.getDomains()
   );
   
   return {
@@ -16,10 +24,11 @@ export function useDomains() {
   };
 }
 
-export function useDomain(id: string) {
+export function useDomain(id: string, organizationSlug?: string | null) {
+  const client = useOrganizationApiClient(organizationSlug);
   const { data, error, isLoading, mutate } = useSWR<Domain>(
-    id ? `/api/domains/${id}` : null,
-    () => apiClient.getDomain(id)
+    id && organizationSlug ? `/orgs/${organizationSlug}/domains/${id}` : null,
+    () => client.getDomain(id)
   );
   
   return {
@@ -30,10 +39,54 @@ export function useDomain(id: string) {
   };
 }
 
+// Organization hooks
+export function useUserOrganizations() {
+  const { data, error, isLoading, mutate } = useSWR('/user/organizations', () => 
+    apiClient.getUserOrganizations()
+  );
+  
+  return {
+    organizations: data?.organizations || [],
+    isLoading,
+    isError: error,
+    mutate,
+  };
+}
+
+export function useOrganization(slug: string) {
+  const { data, error, isLoading, mutate } = useSWR(
+    slug ? `/orgs/${slug}` : null,
+    () => apiClient.getOrganization(slug)
+  );
+  
+  return {
+    organization: data,
+    isLoading,
+    isError: error,
+    mutate,
+  };
+}
+
+export function useOrganizationMembers(slug: string) {
+  const { data, error, isLoading, mutate } = useSWR(
+    slug ? `/orgs/${slug}/members` : null,
+    () => apiClient.getOrganizationMembers(slug)
+  );
+  
+  return {
+    members: data?.members || [],
+    isLoading,
+    isError: error,
+    mutate,
+  };
+}
+
 // Edge Node hooks
-export function useEdgeNodes() {
-  const { data, error, isLoading, mutate } = useSWR<EdgeNode[]>('/api/edges', () => 
-    apiClient.getEdgeNodes()
+export function useEdgeNodes(organizationSlug?: string | null) {
+  const client = useOrganizationApiClient(organizationSlug);
+  const { data, error, isLoading, mutate } = useSWR<EdgeNode[]>(
+    organizationSlug ? `/orgs/${organizationSlug}/edges` : '/api/edges',
+    () => client.getEdgeNodes()
   );
   
   return {
@@ -81,9 +134,11 @@ export function useAnalytics(params: {
 }
 
 // Dashboard specific hooks
-export function useDashboardMetrics() {
-  const { data, error, isLoading, mutate } = useSWR('/api/metrics/dashboard', () => 
-    apiClient.getDashboardMetrics(),
+export function useDashboardMetrics(organizationSlug?: string | null) {
+  const client = useOrganizationApiClient(organizationSlug);
+  const { data, error, isLoading, mutate } = useSWR(
+    organizationSlug ? `/orgs/${organizationSlug}/analytics/overview` : '/api/metrics/dashboard',
+    () => client.getDashboardMetrics(),
     { refreshInterval: 30000 } // Refresh every 30 seconds
   );
   
@@ -95,9 +150,11 @@ export function useDashboardMetrics() {
   };
 }
 
-export function useTrafficData(hours: number = 24) {
-  const { data, error, isLoading, mutate } = useSWR(`/api/metrics/traffic?hours=${hours}`, () => 
-    apiClient.getTrafficData(hours),
+export function useTrafficData(hours: number = 24, organizationSlug?: string | null) {
+  const client = useOrganizationApiClient(organizationSlug);
+  const { data, error, isLoading, mutate } = useSWR(
+    organizationSlug ? `/orgs/${organizationSlug}/analytics/traffic?hours=${hours}` : `/api/metrics/traffic?hours=${hours}`,
+    () => client.getTrafficData(hours),
     { refreshInterval: 60000 } // Refresh every minute
   );
   
@@ -109,9 +166,11 @@ export function useTrafficData(hours: number = 24) {
   };
 }
 
-export function useTopDomains(limit: number = 10) {
-  const { data, error, isLoading, mutate } = useSWR(`/api/metrics/top-domains?limit=${limit}`, () => 
-    apiClient.getTopDomains(limit),
+export function useTopDomains(limit: number = 10, organizationSlug?: string | null) {
+  const client = useOrganizationApiClient(organizationSlug);
+  const { data, error, isLoading, mutate } = useSWR(
+    organizationSlug ? `/orgs/${organizationSlug}/analytics/top-domains?limit=${limit}` : `/api/metrics/top-domains?limit=${limit}`,
+    () => client.getTopDomains(limit),
     { refreshInterval: 60000 }
   );
   
@@ -123,9 +182,11 @@ export function useTopDomains(limit: number = 10) {
   };
 }
 
-export function useRecentActivity(limit: number = 10) {
-  const { data, error, isLoading, mutate } = useSWR(`/api/activity?limit=${limit}`, () => 
-    apiClient.getRecentActivity(limit),
+export function useRecentActivity(limit: number = 10, organizationSlug?: string | null) {
+  const client = useOrganizationApiClient(organizationSlug);
+  const { data, error, isLoading, mutate } = useSWR(
+    organizationSlug ? `/orgs/${organizationSlug}/activity?limit=${limit}` : `/api/activity?limit=${limit}`,
+    () => client.getRecentActivity(limit),
     { refreshInterval: 30000 }
   );
   

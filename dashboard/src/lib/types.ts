@@ -1,3 +1,10 @@
+export interface SSLCertificate {
+  status: 'valid' | 'expired' | 'invalid' | 'expiring';
+  issuer: string;
+  expires_at: string;
+  subject: string;
+}
+
 export interface Domain {
   id: string;
   domain: string;
@@ -7,21 +14,57 @@ export interface Domain {
   cache_ttl: number;
   created_at: string;
   updated_at: string;
+  ssl_certificate?: SSLCertificate;
+  bandwidth_usage?: number;
+  compression_enabled?: boolean;
+  security_level?: 'off' | 'low' | 'medium' | 'high' | 'under_attack';
+  custom_headers?: Record<string, string>;
+}
+
+export interface DomainFormData {
+  domain: string;
+  origin: string;
+  ssl_enabled: boolean;
+  cache_ttl: number;
+  compression_enabled: boolean;
+  security_level: 'off' | 'low' | 'medium' | 'high' | 'under_attack';
+}
+
+export interface DomainModalProps {
+  domain?: Domain | null;
+  isOpen: boolean;
+  onClose: () => void;
+}
+
+export interface AddDomainModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onSubmit: (domainData: DomainFormData) => Promise<void>;
+}
+
+export interface FormErrors {
+  domain?: string;
+  origin?: string;
+  submit?: string;
 }
 
 export interface EdgeNode {
   id: string;
+  organization_id?: string;
   hostname: string;
   ip_address: string;
   region: string;
   location?: string;
-  status: 'online' | 'offline' | 'warning';
-  health_score: number;
+  capacity: number;
+  status: 'healthy' | 'degraded' | 'unhealthy' | 'online' | 'offline' | 'warning';
+  health_score?: number;
   last_heartbeat: string;
-  version: string;
-  total_requests: number;
-  cache_hit_ratio: number;
-  avg_response_time: number;
+  created_at: string;
+  version?: string;
+  total_requests?: number;
+  cache_hit_ratio?: number;
+  avg_response_time?: number;
+  metadata?: Record<string, unknown>;
 }
 
 export interface CacheEntry {

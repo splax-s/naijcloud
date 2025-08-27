@@ -5,12 +5,30 @@ import {
   ServerIcon,
   ChartBarIcon,
   ClockIcon,
+  BuildingOfficeIcon,
 } from '@heroicons/react/24/outline';
 import { useDashboardMetrics } from '@/lib/hooks';
 import { LoadingSpinner, ErrorCard } from '@/components/ui/Loading';
+import { useOrganization } from '@/components/providers/OrganizationProvider';
 
 export function StatsCards() {
-  const { metrics, isLoading, isError, mutate } = useDashboardMetrics();
+  const { organization } = useOrganization();
+  const { metrics, isLoading, isError, mutate } = useDashboardMetrics(organization?.slug);
+
+  // Show organization selection prompt if no organization is selected
+  if (!organization) {
+    return (
+      <div className="bg-white overflow-hidden shadow rounded-lg border border-gray-200">
+        <div className="p-8 text-center">
+          <BuildingOfficeIcon className="mx-auto h-12 w-12 text-gray-400" />
+          <h3 className="mt-2 text-lg font-medium text-gray-900">No Organization Selected</h3>
+          <p className="mt-1 text-sm text-gray-500">
+            Please select an organization from the header to view metrics.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   if (isLoading) {
     return (

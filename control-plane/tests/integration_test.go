@@ -33,6 +33,7 @@ type IntegrationTestSuite struct {
 	edgeSvc      *services.EdgeService
 	cacheSvc     *services.CacheService
 	analyticsSvc *services.AnalyticsService
+	apiKeySvc    *services.APIKeyService
 }
 
 func (suite *IntegrationTestSuite) SetupSuite() {
@@ -69,6 +70,7 @@ func (suite *IntegrationTestSuite) SetupSuite() {
 	suite.edgeSvc = services.NewEdgeService(suite.db, suite.redis)
 	suite.analyticsSvc = services.NewAnalyticsService(suite.db)
 	suite.cacheSvc = services.NewCacheService(suite.redis, suite.edgeSvc)
+	suite.apiKeySvc = services.NewAPIKeyService(suite.db)
 
 	// Set up router
 	gin.SetMode(gin.TestMode)
@@ -87,7 +89,7 @@ func (suite *IntegrationTestSuite) SetupSuite() {
 
 	// API routes
 	v1 := suite.router.Group("/v1")
-	api.SetupRoutes(v1, suite.domainSvc, suite.edgeSvc, suite.analyticsSvc, suite.cacheSvc)
+	api.SetupRoutes(v1, suite.domainSvc, suite.edgeSvc, suite.analyticsSvc, suite.cacheSvc, suite.apiKeySvc)
 }
 
 func (suite *IntegrationTestSuite) SetupTest() {

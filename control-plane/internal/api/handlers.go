@@ -29,7 +29,22 @@ func SetupRoutes(
 	edgeService *services.EdgeService,
 	analyticsService *services.AnalyticsService,
 	cacheService *services.CacheService,
+	apiKeyService *services.APIKeyService,
 ) {
+	// Create API key handler
+	apiKeyHandler := NewAPIKeyHandler(apiKeyService)
+
+	// API Key management routes (requires organization context)
+	apiKeys := r.Group("/api-keys")
+	{
+		apiKeys.POST("", apiKeyHandler.CreateAPIKey)
+		apiKeys.GET("", apiKeyHandler.ListAPIKeys)
+		apiKeys.GET("/:keyId", apiKeyHandler.GetAPIKey)
+		apiKeys.PUT("/:keyId", apiKeyHandler.UpdateAPIKey)
+		apiKeys.DELETE("/:keyId", apiKeyHandler.DeleteAPIKey)
+		apiKeys.GET("/:keyId/usage", apiKeyHandler.GetAPIKeyUsage)
+	}
+
 	// Domain routes
 	domains := r.Group("/domains")
 	{

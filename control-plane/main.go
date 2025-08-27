@@ -51,6 +51,9 @@ func main() {
 	// Initialize multi-tenancy services
 	orgService := services.NewOrganizationService(db)
 	userService := services.NewUserService(db)
+	apiKeyService := services.NewAPIKeyService(db)
+	authService := services.NewAuthService(db)
+	emailService := services.NewEmailService(db)
 
 	// Setup HTTP server
 	router := gin.New()
@@ -69,7 +72,7 @@ func main() {
 	})
 
 	// API routes - use multi-tenant setup
-	api.SetupMultiTenantRoutes(router, orgService, userService, domainService, edgeService, analyticsService, cacheService)
+	api.SetupMultiTenantRoutes(router, orgService, userService, domainService, edgeService, analyticsService, cacheService, apiKeyService, authService, emailService)
 
 	// Metrics server
 	go func() {

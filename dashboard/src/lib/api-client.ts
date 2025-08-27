@@ -11,25 +11,87 @@ import {
   RecentActivity 
 } from './types';
 import { mockData } from './mock-data';
+import { getSession } from 'next-auth/react';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
 
+interface ApiClientOptions {
+  organizationSlug?: string;
+}
+
+interface OrganizationSettings {
+  [key: string]: unknown;
+}
+
+interface User {
+  id: string;
+  name: string;
+  email: string;
+  avatar_url?: string;
+}
+
+interface OrganizationMember {
+  user: User;
+  role: string;
+  permissions: string[];
+}
+
 class ApiClient {
   private baseUrl: string;
+  private organizationSlug?: string;
 
-  constructor(baseUrl: string = API_BASE_URL) {
-    this.baseUrl = baseUrl + '/v1'; // Add v1 prefix for the Go API
+  constructor(baseUrl: string = API_BASE_URL, options?: ApiClientOptions) {
+    this.baseUrl = baseUrl + '/api/v1'; // Add api/v1 prefix for the Go API
+    this.organizationSlug = options?.organizationSlug;
+  }
+
+  // Create organization-scoped client
+  forOrganization(organizationSlug: string): ApiClient {
+    return new ApiClient(API_BASE_URL, { organizationSlug });
   }
 
   // Endpoints that exist in the Go backend
   private readonly realEndpoints = [
     '/domains',
     '/edges', 
-    '/analytics'
+    '/analytics',
+    '/metrics/dashboard',
+    '/metrics/traffic',
+    '/metrics/top-domains',
+    '/activity',
+    '/health', // Add health endpoint
+    '/orgs' // Organization endpoints
   ];
 
   private isRealEndpoint(endpoint: string): boolean {
     return this.realEndpoints.some(real => endpoint.startsWith(real));
+  }
+
+  private async getAuthHeaders(): Promise<Record<string, string>> {
+    const session = await getSession();
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+
+    if (session?.user) {
+      headers['X-User-ID'] = session.user.id;
+      headers['X-User-Email'] = session.user.email || '';
+    }
+
+    if (this.organizationSlug) {
+      headers['X-Organization-Slug'] = this.organizationSlug;
+    }
+
+    return headers;
+  }
+
+  private getEndpointUrl(endpoint: string): string {
+    // For organization-scoped endpoints, use the multi-tenant API structure
+    if (this.organizationSlug && (endpoint.startsWith('/domains') || endpoint.startsWith('/edges') || endpoint.startsWith('/analytics'))) {
+      return `${this.baseUrl}/orgs/${this.organizationSlug}${endpoint}`;
+    }
+    
+    return `${this.baseUrl}${endpoint}`;
   }
 
   private async request<T>(
@@ -37,15 +99,17 @@ class ApiClient {
     options: RequestInit = {}
   ): Promise<T> {
     // Check if this endpoint exists in the real API
-    const useRealAPI = this.isRealEndpoint(endpoint);
+    const useRealAPI = this.isRealEndpoint(endpoint) || endpoint.startsWith('/orgs');
     
     if (useRealAPI) {
       // Try real API for endpoints that exist in Go backend
       try {
-        const url = `${this.baseUrl}${endpoint}`;
+        const url = this.getEndpointUrl(endpoint);
+        const authHeaders = await this.getAuthHeaders();
+        
         const response = await fetch(url, {
           headers: {
-            'Content-Type': 'application/json',
+            ...authHeaders,
             ...options.headers,
           },
           ...options,
@@ -120,6 +184,19 @@ class ApiClient {
 
   async deleteDomain(id: string): Promise<void> {
     await this.request(`/domains/${id}`, { method: 'DELETE' });
+  }
+
+  // Organization Management
+  async getUserOrganizations(): Promise<{ organizations: Array<{ id: string; name: string; slug: string; role: string }> }> {
+    return this.request<{ organizations: Array<{ id: string; name: string; slug: string; role: string }> }>('/user/organizations');
+  }
+
+  async getOrganization(slug: string): Promise<{ id: string; name: string; slug: string; plan: string; settings: OrganizationSettings }> {
+    return this.request<{ id: string; name: string; slug: string; plan: string; settings: OrganizationSettings }>(`/orgs/${slug}`);
+  }
+
+  async getOrganizationMembers(slug: string): Promise<{ members: OrganizationMember[] }> {
+    return this.request<{ members: OrganizationMember[] }>(`/orgs/${slug}/members`);
   }
 
   // Edge Node Management
